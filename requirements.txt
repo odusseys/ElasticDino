@@ -1,0 +1,12 @@
+triton --extra-index-url "https://download.pytorch.org/whl/nightly/cu121"
+datasets
+kornia
+torchmetrics
+timm
+wandb
+pycocotools
+bitsandbytes
+lightning
+transformers
+torch
+torchvision
