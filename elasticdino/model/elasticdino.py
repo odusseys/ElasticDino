@@ -14,14 +14,17 @@ def make_base_locations(batch_size, size, dtype):
 
 
 class DeformerBlock(nn.Module):
-  def __init__(self, n_layers, n_features, n_features_in, n_image_features):
+  def __init__(self, n_layers, n_features, n_features_in, n_image_features, compile=True):
     super().__init__()
     self.image_encoder = ProjectionLayer(n_image_features, n_features)
     self.feature_encoder = ProjectionLayer(n_features_in, n_features)
 
+    blocks = [ResidualBlock(n_features) for _ in range(n_layers)]
+    if compile:
+      blocks = [torch.compile(b, dynamic=True)  for b in blocks]
     self.convs = nn.Sequential(
         ProjectionLayer(n_features * 2, n_features),
-        *[torch.compile(ResidualBlock(n_features), dynamic=True) for _ in range(n_layers)]
+        *blocks
     )
 
     last_layer = nn.Conv2d(n_features // 8, 2, 1)
@@ -29,7 +32,7 @@ class DeformerBlock(nn.Module):
     torch.nn.init.normal_(last_layer.weight, mean=0.0, std=0.003, generator=None)
     nn.init.zeros_(last_layer.bias)
 
-    self.deformer = torch.compile(nn.Sequential(
+    self.deformer = nn.Sequential(
         nn.Conv2d(n_features, n_features // 2, 1),
         Activation(),
         nn.Conv2d(n_features // 2, n_features // 4, 1),
@@ -37,7 +40,10 @@ class DeformerBlock(nn.Module):
         nn.Conv2d(n_features // 4, n_features // 8, 1),
         Activation(),
         last_layer,
-    ), dynamic=True)
+    )
+
+    if compile:
+      self.deformer = torch.compile(self.deformer, dynamic=True)
 
 
   def forward(self, features, image):
@@ -50,10 +56,10 @@ class DeformerBlock(nn.Module):
     return torch.nn.functional.grid_sample(features, field, padding_mode="border", align_corners=False)
 
 class ElasticDinoStage(nn.Module):
-  def __init__(self, layer_config, n_features_in, n_image_features):
+  def __init__(self, layer_config, n_features_in, n_image_features, compile=True):
     super().__init__()
     self.blocks = nn.ModuleList([
-        DeformerBlock(layer_config["layers_per_block"], layer_config["hidden_features"], n_features_in, n_image_features)
+        DeformerBlock(layer_config["layers_per_block"], layer_config["hidden_features"], n_features_in, n_image_features, compile)
         for _ in range(layer_config["n_blocks"])
     ])
 
@@ -78,14 +84,10 @@ CONFIGS = {
 }
 
 def repair_checkpoint(path):
-    def remove_prefix(text, prefix):
-        if text.startswith(prefix):
-            return text[len(prefix) :]
-        return text
     ckpt = torch.load(path)
     in_state_dict = ckpt
     pairings = [
-        (src_key, remove_prefix(src_key, "_orig_mod."))
+        (src_key, "".join(src_key.split("_orig_mod.")))
         for src_key in in_state_dict.keys()
     ]
     if all(src_key == dest_key for src_key, dest_key in pairings):
@@ -98,7 +100,7 @@ def repair_checkpoint(path):
 
 
 class ElasticDino(nn.Module):
-  def __init__(self, config):
+  def __init__(self, config, compile=True):
     super().__init__()
     self.config = config
 
@@ -110,13 +112,13 @@ class ElasticDino(nn.Module):
     assert n_upscales == len(layer_configs), "Incompatible resolutions and feature config"
 
     self.stages = nn.ModuleList([
-        ElasticDinoStage(layer_configs[res], n_features_in, n_image_features) for res in layer_configs
+        ElasticDinoStage(layer_configs[res], n_features_in, n_image_features, compile) for res in layer_configs
     ])
 
     self.dino = DinoV2(config["dino_model"])
 
   def forward(self, images):
-    features = self.dino.get_features_for_tensor(resize_for_dino(images, self.config["starting_size"]))
+    features = self.dino.get_features_for_tensor(resize_for_dino(images, self.config["start_size"]))
     images = nn.functional.interpolate(images, self.config["target_size"], mode="bilinear", antialias=True)
     n = len(self.stages)
     current_size = features.shape[-1]
@@ -127,10 +129,10 @@ class ElasticDino(nn.Module):
         features = torch.nn.functional.interpolate(features, current_size, mode="nearest")
     return features
   
-  def from_pretrained(checkpoint_path, model_name):
+  def from_pretrained(checkpoint_path, model_name, compile=True):
     config = CONFIGS[model_name]
     repair_checkpoint(checkpoint_path)
     checkpoint = torch.load(checkpoint_path, weights_only=True)
-    model = ElasticDino(config)
+    model = ElasticDino(config, compile)
     model.load_state_dict(checkpoint)
     return model

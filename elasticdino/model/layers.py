@@ -16,7 +16,6 @@ class DepthwiseConvolution(nn.Module):
         return out
 
 
-
 class ResidualBlock(nn.Module):
   def __init__(self, out_channels, kernel_size=3, padding=1, dtype=torch.float32, padding_mode="replicate", shrinkage=1.0):
     super().__init__()

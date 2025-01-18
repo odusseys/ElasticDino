@@ -6,7 +6,6 @@ timm
 wandb
 pycocotools
 bitsandbytes
-lightning
 transformers
 torch
 torchvision
