@@ -1,6 +1,7 @@
-from elasticdino.model.layers import ResidualBlock, Activation, NormLayer, ProjectionLayer
+from elasticdino.model.layers import ResidualBlock, Activation, ProjectionLayer
 import torch.nn as nn
 import torch
+from elasticdino.training.dpt import DPTHead
 
 class Down(nn.Module):
     """Downscaling with maxpool then double conv"""
@@ -59,12 +60,11 @@ class UNet(nn.Module):
         self.up3 = (Up(hidden_size * 4, hidden_size * 2 // 2))
         self.up4 = (Up(hidden_size * 2, hidden_size))
         self.outc = nn.Sequential(
-            nn.Conv2d(hidden_size, hidden_size, 1),
+            nn.Conv2d(hidden_size, hidden_size // 2, 1),
             Activation(),
-            nn.Conv2d(hidden_size, hidden_size, 1),
+            nn.Conv2d(hidden_size // 2, hidden_size // 4, 1),
             Activation(),
-            nn.Conv2d(hidden_size, 1, 1),
-            nn.Softplus(), # non-negative
+            nn.Conv2d(hidden_size // 4, 1, 1),
         )
 
     def forward(self, x):
@@ -79,3 +79,34 @@ class UNet(nn.Module):
         x = self.up4(x, x1)
         x = self.outc(x)
         return x
+
+
+class DPTDepthModel(nn.Module):
+    def __init__(self, n_features, dino, target_size):
+        super().__init__()
+        self.dino = dino
+        self.head = DPTHead(dino.feature_size, n_features)
+        self.out = nn.Sequential(nn.Upsample(target_size), nn.Identity())
+
+    
+    def forward(self, x):
+        print("in model", x.shape)
+        x = torch.nn.functional.interpolate(x, 224, mode="bilinear")
+        with torch.no_grad():
+            f = self.dino.get_intermediate_features_for_tensor(x, 4)
+            f = torch.stack(f).transpose(0, 1)
+        return self.out(self.head(f))
+
+class ElasticDinoDepthModel(nn.Module):
+    def __init__(self, n_features, elasticdino):
+        super().__init__()
+        elasticdino.requires_grad_ = False
+        self.elasticdino = elasticdino.eval()
+        self.head = UNet(elasticdino.config["n_features_in"], n_features)
+        self.out = nn.Identity()
+
+    def forward(self, x):
+        x = torch.nn.functional.interpolate(x, 224, mode="bilinear")
+        with torch.no_grad():
+            f = self.elasticdino(x)
+        return self.out(self.head(f))

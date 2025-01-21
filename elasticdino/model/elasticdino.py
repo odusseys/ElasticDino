@@ -14,17 +14,14 @@ def make_base_locations(batch_size, size, dtype):
 
 
 class DeformerBlock(nn.Module):
-  def __init__(self, n_layers, n_features, n_features_in, n_image_features, compile=True):
+  def __init__(self, n_layers, n_features, n_features_in, n_image_features):
     super().__init__()
     self.image_encoder = ProjectionLayer(n_image_features, n_features)
     self.feature_encoder = ProjectionLayer(n_features_in, n_features)
 
-    blocks = [ResidualBlock(n_features) for _ in range(n_layers)]
-    if compile:
-      blocks = [torch.compile(b, dynamic=True)  for b in blocks]
     self.convs = nn.Sequential(
         ProjectionLayer(n_features * 2, n_features),
-        *blocks
+        *[ResidualBlock(n_features) for _ in range(n_layers)]
     )
 
     last_layer = nn.Conv2d(n_features // 8, 2, 1)
@@ -42,9 +39,6 @@ class DeformerBlock(nn.Module):
         last_layer,
     )
 
-    if compile:
-      self.deformer = torch.compile(self.deformer, dynamic=True)
-
 
   def forward(self, features, image):
     image = self.image_encoder(image)
@@ -56,10 +50,10 @@ class DeformerBlock(nn.Module):
     return torch.nn.functional.grid_sample(features, field, padding_mode="border", align_corners=False)
 
 class ElasticDinoStage(nn.Module):
-  def __init__(self, layer_config, n_features_in, n_image_features, compile=True):
+  def __init__(self, layer_config, n_features_in, n_image_features):
     super().__init__()
     self.blocks = nn.ModuleList([
-        DeformerBlock(layer_config["layers_per_block"], layer_config["hidden_features"], n_features_in, n_image_features, compile)
+        DeformerBlock(layer_config["layers_per_block"], layer_config["hidden_features"], n_features_in, n_image_features)
         for _ in range(layer_config["n_blocks"])
     ])
 
@@ -71,7 +65,7 @@ class ElasticDinoStage(nn.Module):
 
 
 CONFIGS = {
-  "elasticdino-L-64":  dict(
+  "elasticdino-64-L":  dict(
         dino_model="l",
         n_features_in=1024,
         layers={
@@ -80,7 +74,18 @@ CONFIGS = {
         },
         start_size=64,
         target_size=128,
-    )
+    ),
+    "elasticdino-32-L": dict(
+        dino_model="l",
+        n_features_in=1024,
+        layers={
+            32: dict(hidden_features=512, n_blocks=5, layers_per_block=8),
+            64: dict(hidden_features=256, n_blocks=4, layers_per_block=8),
+            128: dict(hidden_features=256, n_blocks=3, layers_per_block=8),
+        },
+        start_size=32,
+        target_size=128,
+    ),
 }
 
 def repair_checkpoint(path):
@@ -100,7 +105,7 @@ def repair_checkpoint(path):
 
 
 class ElasticDino(nn.Module):
-  def __init__(self, config, compile=True):
+  def __init__(self, config):
     super().__init__()
     self.config = config
 
@@ -112,7 +117,7 @@ class ElasticDino(nn.Module):
     assert n_upscales == len(layer_configs), "Incompatible resolutions and feature config"
 
     self.stages = nn.ModuleList([
-        ElasticDinoStage(layer_configs[res], n_features_in, n_image_features, compile) for res in layer_configs
+        ElasticDinoStage(layer_configs[res], n_features_in, n_image_features) for res in layer_configs
     ])
 
     self.dino = DinoV2(config["dino_model"])
@@ -129,10 +134,16 @@ class ElasticDino(nn.Module):
         features = torch.nn.functional.interpolate(features, current_size, mode="nearest")
     return features
   
-  def from_pretrained(checkpoint_path, model_name, compile=True):
+  def from_pretrained(checkpoint_path, model_name):
     config = CONFIGS[model_name]
     repair_checkpoint(checkpoint_path)
     checkpoint = torch.load(checkpoint_path, weights_only=True)
-    model = ElasticDino(config, compile)
+    model = ElasticDino(config)
+
+    # don't load parameters in the pretrained dino
+    tmp_dino = model.dino
+    model.dino = None
     model.load_state_dict(checkpoint)
+    model.dino = tmp_dino
+
     return model

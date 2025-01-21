@@ -22,12 +22,19 @@ def resize_for_dino(images, starting_size):
 
 import torch.nn as nn
 
-class DinoV2(nn.Module):
-  def __init__(self, dino_model):
+class DinoWrapper(nn.Module):
+  def __init__(self, dino):
     super().__init__()
-    dino_backbone = torch.hub.load('facebookresearch/dinov2', f'dinov2_vit{dino_model}14_reg')
+    self.dino = dino
+  
+  def forward(self, x, n):
+    return self.dino.get_intermediate_layers(x, n=n)
+
+class DinoV2:
+  def __init__(self, dino_model):
+    dino_backbone = DinoWrapper(torch.hub.load('facebookresearch/dinov2', f'dinov2_vit{dino_model}14_reg'))
     dino_backbone.requires_grad_(False)
-    self.dino_backbone = dino_backbone.eval()
+    self.dino_backbone = torch.compile(dino_backbone.eval().to("cuda", torch.float32))
     self.feature_size = FEATURE_SIZES[dino_model]
 
   def prepare_images(self, images):
@@ -41,7 +48,7 @@ class DinoV2(nn.Module):
 
   def get_intermediate_features_for_tensor(self, images, n):
     with torch.no_grad():
-      res = self.dino_backbone.get_intermediate_layers(images, n=n)
+      res = self.dino_backbone(images, n=n)
       grid_size = int(math.sqrt(res[0].shape[1]))
       res = [r.reshape((r.shape[0], grid_size, grid_size, self.feature_size)).permute((0, 3, 1, 2)) for r in res]
       del images
