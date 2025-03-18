@@ -1,0 +1,6 @@
+test*
+**/__pycache__
+model_cache
+playground*
+pretrain*
+*.slurm
