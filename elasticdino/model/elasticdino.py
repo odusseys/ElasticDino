@@ -4,6 +4,8 @@ import math
 from elasticdino.model.dino import DinoV2, resize_for_dino
 from elasticdino.model.layers import ProjectionLayer, ResidualBlock, Activation, FCLayer
 import logging
+from huggingface_hub import hf_hub_download
+
 
 # logger = logging.getLogger("ElasticDino")
 
@@ -187,55 +189,56 @@ class ElasticDino(nn.Module):
     self.dino = DinoV2(dino_repo, config["dino_model"])
 
   def forward(self, images, return_all_scales=False, return_original_features=False, return_displacements=False, n_hidden_layers=None):
-    if n_hidden_layers is None:
-      additional_inputs = []
-      features_in = self.dino.get_features_for_tensor(resize_for_dino(images, self.config["start_size"]))
-    else:
-      additional_inputs = self.dino.get_intermediate_features_for_tensor(resize_for_dino(images, self.config["start_size"]), n_hidden_layers)
-      features_in = additional_inputs.pop(-1)
-    features = features_in
-    images = nn.functional.interpolate(images, self.config["target_size"], mode="bilinear", antialias=True)
-    results = []
-    all_displacements = []
-    n = len(self.stages)
-    current_size = features.shape[-1]
-    for i in range(n):
-      stage_outputs = self.stages[i](features, images, return_displacements, additional_inputs)
-      features = stage_outputs["features"]
+    with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
+      if n_hidden_layers is None:
+        additional_inputs = []
+        features_in = self.dino.get_features_for_tensor(resize_for_dino(images, self.config["start_size"]))
+      else:
+        additional_inputs = self.dino.get_intermediate_features_for_tensor(resize_for_dino(images, self.config["start_size"]), n_hidden_layers)
+        features_in = additional_inputs.pop(-1)
+      features = features_in
+      images = nn.functional.interpolate(images, self.config["target_size"], mode="bilinear", antialias=True)
+      results = []
+      all_displacements = []
+      n = len(self.stages)
+      current_size = features.shape[-1]
+      for i in range(n):
+        stage_outputs = self.stages[i](features, images, return_displacements, additional_inputs)
+        features = stage_outputs["features"]
 
+        if return_all_scales:
+          results.append(features)
+        additional_inputs = stage_outputs["additional_inputs"]
+
+        del stage_outputs
+
+        if return_displacements:
+          all_displacements.append(features["displacements"])
+        if i < n - 1:
+          current_size *= 2
+          features = torch.nn.functional.interpolate(features, current_size, mode="nearest")
+      
+      if (not return_all_scales) and (not return_original_features) and (not return_displacements) and n_hidden_layers is None:
+        return features
+
+      out = dict(deformed_features=features)
       if return_all_scales:
-        results.append(features)
-      additional_inputs = stage_outputs["additional_inputs"]
-
-      del stage_outputs
-
+        out["all_scales"] = results
+      if return_original_features:
+        out["original_features"] = features_in
       if return_displacements:
-        all_displacements.append(features["displacements"])
-      if i < n - 1:
-        current_size *= 2
-        features = torch.nn.functional.interpolate(features, current_size, mode="nearest")
-    
-    if (not return_all_scales) and (not return_original_features) and (not return_displacements) and n_hidden_layers is None:
-      return features
-
-    out = dict(deformed_features=features)
-    if return_all_scales:
-      out["all_scales"] = results
-    if return_original_features:
-      out["original_features"] = features_in
-    if return_displacements:
-      out["displacements"] = all_displacements
-    if n_hidden_layers is not None:
-      additional_inputs.append(features)
-      out["hidden_layers"] = additional_inputs
-    
-    del additional_inputs
-    del all_displacements
-    del features_in
-    del results
-    del features
-    del images
-    return out
+        out["displacements"] = all_displacements
+      if n_hidden_layers is not None:
+        additional_inputs.append(features)
+        out["hidden_layers"] = additional_inputs
+      
+      del additional_inputs
+      del all_displacements
+      del features_in
+      del results
+      del features
+      del images
+      return out
     
 
   def parameters(self):
@@ -244,9 +247,10 @@ class ElasticDino(nn.Module):
   def train(self, value=True):
     self.stages.train(value)
   
-  def from_pretrained(checkpoint_path, model_name, dino_repo='facebookresearch/dinov2'):
-    # logger.info("Loading ElasticDino", model_name)
+  def from_pretrained(model_name, checkpoint_path=None, dino_repo='facebookresearch/dinov2'):
     config = CONFIGS[model_name]
+    if checkpoint_path is None:
+      checkpoint_path = hf_hub_download(repo_id=f"ulyssemizrahi/{model_name}", filename=f"{model_name}.pth")
     repair_checkpoint(checkpoint_path)
     checkpoint = torch.load(checkpoint_path, weights_only=True)
     model = ElasticDino(config, dino_repo)
@@ -255,5 +259,4 @@ class ElasticDino(nn.Module):
     model.dino = None
     model.load_state_dict(checkpoint)
     model.dino = tmp_dino
-    # logger.info("ElasticDino loaded successfully")
     return model
