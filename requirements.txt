@@ -1,0 +1,9 @@
+datasets
+kornia
+torchmetrics
+timm
+pycocotools
+bitsandbytes
+transformers
+torch
+torchvision
