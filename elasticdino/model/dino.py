@@ -49,16 +49,36 @@ class DinoV2(nn.Module):
     tensors = tensors.to(dtype=torch.float32, device=device) / 255.0
     return tensors
 
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  # Doc: functions after addition of normalization
   def get_features_for_tensor(self, images):
     return self.get_intermediate_features_for_tensor(images, 1)[0]
 
   def get_intermediate_features_for_tensor(self, images, n):
+    IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
+    IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
+    transform = transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)
+
     with torch.no_grad():
+      images = transform(images)
       res = self.dino_backbone.get_intermediate_layers(images, n=n)
       grid_size = int(math.sqrt(res[0].shape[1]))
       res = [r.reshape((r.shape[0], grid_size, grid_size, self.feature_size)).permute((0, 3, 1, 2)) for r in res]
       del images
       return res
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  # Doc: Original functions (without normalization)
+  # def get_features_for_tensor(self, images):
+  #   return self.get_intermediate_features_for_tensor(images, 1)[0]
+
+  # def get_intermediate_features_for_tensor(self, images, n):
+  #   with torch.no_grad():
+  #     res = self.dino_backbone.get_intermediate_layers(images, n=n)
+  #     grid_size = int(math.sqrt(res[0].shape[1]))
+  #     res = [r.reshape((r.shape[0], grid_size, grid_size, self.feature_size)).permute((0, 3, 1, 2)) for r in res]
+  #     del images
+  #     return res
   
   def get_features(self, images):
     images = self.prepare_images(images)

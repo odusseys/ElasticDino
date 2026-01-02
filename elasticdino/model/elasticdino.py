@@ -140,16 +140,16 @@ class ElasticDinoStage(nn.Module):
 
 
 CONFIGS = {
-  "elasticdino-64-L":  dict(
-        dino_model="l",
-        n_features_in=1024,
-        layers={
-            64: dict(hidden_features=256, n_blocks=4, layers_per_block=8),
-            128: dict(hidden_features=256, n_blocks=3, layers_per_block=8),
-        },
-        start_size=64,
-        target_size=128,
-    ),
+  # "elasticdino-64-L":  dict(
+  #       dino_model="l",
+  #       n_features_in=1024,
+  #       layers={
+  #           64: dict(hidden_features=256, n_blocks=4, layers_per_block=8),
+  #           128: dict(hidden_features=256, n_blocks=3, layers_per_block=8),
+  #       },
+  #       start_size=64,
+  #       target_size=128,
+  #   ),
     "elasticdino-32-L": dict(
         dino_model="l",
         n_features_in=1024,
@@ -160,6 +160,50 @@ CONFIGS = {
         },
         start_size=32,
         target_size=128,
+    ),
+    "elasticdino-64-L":  dict(
+        dino_model="l",
+        n_features_in=1024,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
+    ),
+    "elasticdino-64-S":  dict(
+        dino_model="s",
+        n_features_in=384,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
+    ),
+    "elasticdino-64-B":  dict(
+        dino_model="b",
+        n_features_in=768,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
+    ),
+    "elasticdino-64-G":  dict(
+        dino_model="g",
+        n_features_in=1536,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
     ),
 }
 
@@ -260,8 +304,9 @@ class ElasticDino(nn.Module):
   def from_pretrained(model_name, checkpoint_path=None, dino_repo='facebookresearch/dinov2'):
     config = CONFIGS[model_name]
     if checkpoint_path is None:
-      checkpoint_path = hf_hub_download(repo_id=f"ulyssemizrahi/{model_name}", filename=f"{model_name}.pth")
-    repair_checkpoint(checkpoint_path)
+      # checkpoint_path = hf_hub_download(repo_id=f"ulyssemizrahi/{model_name}", filename=f"{model_name}.pth")
+      checkpoint_path = hf_hub_download(repo_id=f"articuno7/{model_name}", filename=f"{model_name}.pth")
+    repair_checkpoint(checkpoint_path) # Doc ???? Why would need to repair?
     checkpoint = torch.load(checkpoint_path, weights_only=True)
     model = ElasticDino(config, dino_repo)
     # don't load parameters in the pretrained dino
