@@ -100,6 +100,13 @@ def get_random_polygon(polygons, h, w):
                 mask = mask | m
     return mask, i
     
+"""
+Doc: This function is used to get the samples for the training dataset.
+It takes an image id and returns the image, mask, and phrase for the training dataset.
+The image is cropped to the smallest square that contains the object.
+The mask is a binary mask of the object.
+The phrase is the phrase that describes the object.
+"""
 def to_samples(image_id):
     img = Image.open(os.path.join(img_fpath, '%d.jpg' % image_id)).convert("RGB")
     l = min(img.height, img.width)
@@ -112,8 +119,10 @@ def to_samples(image_id):
     
     mask = mask[:l, :l]
     mask = torch.tensor(mask)
+    # Doc resize to the defined image size
     image = torch.nn.functional.interpolate(image, IMAGE_SIZE)
     mask = torch.nn.functional.interpolate(mask.unsqueeze(0).unsqueeze(0).to(dtype=torch.float16), IMAGE_SIZE, mode="nearest").to(dtype=torch.long)
+    # Doc removes size-1 dims added earlier, turning (1, C, H, W) into (C, H, W) and (1, 1, H, W) into (H, W)
     return image.squeeze(), mask.squeeze(), phrase
 
 class PhraseDataset(torch.utils.data.Dataset):
@@ -123,6 +132,7 @@ class PhraseDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.img_ids)
 
+    # Doc When used with a DataLoader, PyTorch repeatedly calls __getitem__ with different idx values to fetch batches.
     def __getitem__(self, idx):
         return to_samples(self.img_ids[idx])
 
@@ -145,6 +155,7 @@ class ResidualFC(nn.Module):
 class FC(nn.Module):
     def __init__(self, fin, out):
         super().__init__()
+        # Doc ? using ReLU and not GELU on purpose?
         self.layers = nn.Sequential(
             nn.Linear(fin, out),
             nn.ReLU(True),
@@ -172,8 +183,10 @@ class EncoderModel(nn.Module):
     def __init__(self, n_features=2048, temperature = 0.2):
         super().__init__()
 
+        # Doc ? scaling factor used to sharpen/soften similarity scores
         self.temperature = temperature
 
+        # Doc ? 768 is the standard embedding size for many pre-trained text encoders (such as BERT-base)
         self.text_encoder = nn.Sequential(
             nn.Linear(768, n_features),
             nn.BatchNorm1d(n_features),
@@ -185,10 +198,15 @@ class EncoderModel(nn.Module):
             nn.Linear(n_features, 1024),
         )
 
+    # ? einsum("bchw,bc->bhw"): computes, for each pixel, the dot product between the 1024-d image feature
+    # and the corresponding 1024-d text feature, yielding a per-pixel similarity map ("bchw,bc->bhw")
     def forward(self, image_features, text_features):
         text_features = torch.nn.functional.normalize(self.text_encoder(text_features), dim=1)
         return torch.einsum("bchw,bc->bhw", image_features, text_features) / self.temperature
         
+# Doc function runs the model on image with passed text description for task (and optional ?ground truth? mask)
+# runs the model to get the saliency map and returns concatenating horizontally the original image, saliency map and mask (if passed)
+# Doc decorator Disables gradient tracking for (things used in) this function (inference-only, saves memory/compute)
 @torch.no_grad
 def make_saliency_map_flat(model, image, text, mask=None):
     C, H, W = image.shape
@@ -263,6 +281,7 @@ dataloader = torch.utils.data.DataLoader(PhraseDataset(), batch_size=batch_size,
 
 checkpoint = None
 
+# Doc prepare the model, optimizer, and dataloader for distributed training (wraps with objects as needed and distributes to the correct devices)
 edino, siglip, model, optimizer, dataloader = accelerator.prepare(edino, siglip, model, optimizer, dataloader)
 if checkpoint is not None:
     accelerator.load_state(checkpoint)

@@ -15,7 +15,7 @@ class DepthwiseConvolution(nn.Module):
         out = self.pointwise(out)
         return out
 
-
+ # Doc ?? Different than the classic ResidualBlock, what is the motivation behind this, how was it designed?
 class ResidualBlock(nn.Module):
   def __init__(self, out_channels, kernel_size=3, padding=1, dtype=torch.float32, padding_mode="replicate", shrinkage=1.0):
     super().__init__()
@@ -44,6 +44,7 @@ class ProjectionLayer(nn.Module):
   def forward(self, x):
     return self.layers(x)
 
+# Doc ? Seems not used
 class FCLayer(nn.Module):
   def __init__(self,  n_features_in, n_features_out=None, residual=False, bn=True, shrinkage=1.0):
     super().__init__()
