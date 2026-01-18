@@ -9,6 +9,7 @@ from huggingface_hub import hf_hub_download
 
 # logger = logging.getLogger("ElasticDino")
 
+# Doc ? seems to not be used !!
 class TaskHeads(nn.Module):
   def __init__(self, n_features_in, n_segmentation_classes):
     super().__init__()
@@ -53,6 +54,8 @@ class TaskHeads(nn.Module):
               )
   
 def make_base_locations(batch_size, size, dtype, device):
+    # Doc torch.arange is a PyTorch function that returns a 1D tensor with evenly spaced values within a specified range
+    # These lines create range in [-1,1) (normalized coordinates)
     x = torch.arange(size, device=device, dtype=dtype) * (2 / size) - 1
     y = torch.arange(size, device=device, dtype=dtype) * (2 / size) - 1
     grid_y, grid_x = torch.meshgrid(y, x, indexing='ij')
@@ -61,11 +64,13 @@ def make_base_locations(batch_size, size, dtype, device):
 
 
 class DeformerBlock(nn.Module):
+  # Doc n_features_in is number of features in the input feature map and n_image_features is number of features in the input image
   def __init__(self, n_layers, n_features, n_features_in, n_image_features):
     super().__init__()
     self.image_encoder = ProjectionLayer(n_image_features, n_features)
     self.feature_encoder = ProjectionLayer(n_features_in, n_features)
 
+    # Doc n_features * 2 because use it on concatenation of image and feature encoders
     self.convs = nn.Sequential(
         ProjectionLayer(n_features * 2, n_features),
         *[ResidualBlock(n_features) for _ in range(n_layers)]
@@ -91,10 +96,14 @@ class DeformerBlock(nn.Module):
     image = self.image_encoder(image)
     f = self.feature_encoder(features)
     f = self.convs(torch.cat([f, image], dim=1))
+    # Doc Permute operations: Convert between (B,H,W,2) ↔ (B,2,H,W) tensor layouts
     base_locations = make_base_locations(image.shape[0], image.shape[-1], image.dtype, image.device).permute((0, 3, 1, 2))
+    # Doc Neural network predicts 2D displacement vectors (dx, dy) for each pixel
     displacements = self.deformer(f)
     field = base_locations + displacements
     field = field.permute((0, 2, 3, 1))
+    # Doc grid_sample: Samples input tensors at deformed coordinates
+    # Doc padding_mode="border": Uses edge values for out-of-bounds sampling
     results = dict(features=torch.nn.functional.grid_sample(features, field, padding_mode="border", align_corners=False))
     add = []
     for x in additional_inputs:
@@ -131,16 +140,16 @@ class ElasticDinoStage(nn.Module):
 
 
 CONFIGS = {
-  "elasticdino-64-L":  dict(
-        dino_model="l",
-        n_features_in=1024,
-        layers={
-            64: dict(hidden_features=256, n_blocks=4, layers_per_block=8),
-            128: dict(hidden_features=256, n_blocks=3, layers_per_block=8),
-        },
-        start_size=64,
-        target_size=128,
-    ),
+  # "elasticdino-64-L":  dict(
+  #       dino_model="l",
+  #       n_features_in=1024,
+  #       layers={
+  #           64: dict(hidden_features=256, n_blocks=4, layers_per_block=8),
+  #           128: dict(hidden_features=256, n_blocks=3, layers_per_block=8),
+  #       },
+  #       start_size=64,
+  #       target_size=128,
+  #   ),
     "elasticdino-32-L": dict(
         dino_model="l",
         n_features_in=1024,
@@ -151,6 +160,50 @@ CONFIGS = {
         },
         start_size=32,
         target_size=128,
+    ),
+    "elasticdino-64-L":  dict(
+        dino_model="l",
+        n_features_in=1024,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
+    ),
+    "elasticdino-64-S":  dict(
+        dino_model="s",
+        n_features_in=384,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
+    ),
+    "elasticdino-64-B":  dict(
+        dino_model="b",
+        n_features_in=768,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
+    ),
+    "elasticdino-64-G":  dict(
+        dino_model="g",
+        n_features_in=1536,
+        layers={
+            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
+            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
+            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
+        },
+        start_size=64,
+        target_size=256,
     ),
 }
 
@@ -178,6 +231,7 @@ class ElasticDino(nn.Module):
     n_features_in = config["n_features_in"]
     layer_configs = config["layers"]
 
+    # Doc probably 3 for RGB
     n_image_features = 3
     n_upscales = int(math.log2(config["target_size"] // config["start_size"])) + 1
     assert n_upscales == len(layer_configs), "Incompatible resolutions and feature config"
@@ -250,8 +304,9 @@ class ElasticDino(nn.Module):
   def from_pretrained(model_name, checkpoint_path=None, dino_repo='facebookresearch/dinov2'):
     config = CONFIGS[model_name]
     if checkpoint_path is None:
-      checkpoint_path = hf_hub_download(repo_id=f"ulyssemizrahi/{model_name}", filename=f"{model_name}.pth")
-    repair_checkpoint(checkpoint_path)
+      # checkpoint_path = hf_hub_download(repo_id=f"ulyssemizrahi/{model_name}", filename=f"{model_name}.pth")
+      checkpoint_path = hf_hub_download(repo_id=f"articuno7/{model_name}", filename=f"{model_name}.pth")
+    repair_checkpoint(checkpoint_path) # Doc ???? Why would need to repair?
     checkpoint = torch.load(checkpoint_path, weights_only=True)
     model = ElasticDino(config, dino_repo)
     # don't load parameters in the pretrained dino
