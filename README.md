@@ -7,14 +7,16 @@ We recommend you create a virtual environment first: `python -m venv my-venv-nam
 ```
 pip install torch torchvision kornia
 
+
+
+```
+
+## Usage
+
+```
+
 from elasticdino.model.elasticdino import ElasticDino
 
 model = ElasticDino.from_pretrained("path/to/checkpoint")
 
 ```
-
-## TODO
-
-- [] Release semantic segmentation and open-vocabulary checkpoints
-- [] Fix and document training and eval code
-
