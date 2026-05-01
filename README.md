@@ -6,9 +6,6 @@ We recommend you create a virtual environment first: `python -m venv my-venv-nam
 
 ```
 pip install torch torchvision kornia
-
-
-
 ```
 
 ## Usage
