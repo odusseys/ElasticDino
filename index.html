@@ -1,227 +1,299 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <!-- Meta tags for social media banners, these should be filled in appropriatly as they are your "business card" -->
-  <!-- Replace the content tag with appropriate information -->
-  <meta name="description" content="DESCRIPTION META TAG">
-  <meta property="og:title" content="SOCIAL MEDIA TITLE TAG"/>
-  <meta property="og:description" content="SOCIAL MEDIA DESCRIPTION TAG TAG"/>
-  <meta property="og:url" content="URL OF THE WEBSITE"/>
-  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X630-->
-  <meta property="og:image" content="static/image/your_banner_image.png" />
-  <meta property="og:image:width" content="1200"/>
-  <meta property="og:image:height" content="630"/>
-
-
-  <meta name="twitter:title" content="TWITTER BANNER TITLE META TAG">
-  <meta name="twitter:description" content="TWITTER BANNER DESCRIPTION META TAG">
-  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X600-->
-  <meta name="twitter:image" content="static/images/your_twitter_banner_image.png">
+  <meta name="description" content="ElasticDino: Dense Semantic Features using Elastic Deformations">
+  <meta property="og:title" content="ElasticDino: Dense Semantic Features using Elastic Deformations">
+  <meta property="og:description" content="A lightweight deformation-based adapter for producing dense, pixel-aligned DINO feature maps.">
+  <meta property="og:url" content="https://odusseys.github.io/ElasticDino/">
+  <meta property="og:image" content="static/images/paper-teaser-full.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:title" content="ElasticDino">
+  <meta name="twitter:description" content="Dense semantic features from DINO backbones using image-guided elastic deformations.">
+  <meta name="twitter:image" content="static/images/paper-teaser-full.png">
   <meta name="twitter:card" content="summary_large_image">
-  <!-- Keywords for your paper to be indexed by-->
-  <meta name="keywords" content="KEYWORDS SHOULD BE PLACED HERE">
+  <meta name="keywords" content="ElasticDino, DINOv2, dense prediction, feature upsampling, semantic segmentation, depth estimation, vision transformers">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-
-  <title>ElasticDino</title>
+  <title>ElasticDino: Dense Semantic Features using Elastic Deformations</title>
   <link rel="icon" type="image/x-icon" href="static/images/favicon.ico">
-  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
-  rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
   <link rel="stylesheet" href="static/css/bulma.min.css">
-  <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
-  <link rel="stylesheet" href="static/css/bulma-slider.min.css">
-  <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
-  <link rel="stylesheet"
-  href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
   <link rel="stylesheet" href="static/css/index.css">
+  <link rel="stylesheet" href="static/css/results.css">
+  <link rel="stylesheet" href="static/css/carousel.css">
 
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-  <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
   <script defer src="static/js/fontawesome.all.min.js"></script>
-  <script src="static/js/bulma-carousel.min.js"></script>
-  <script src="static/js/bulma-slider.min.js"></script>
-  <script src="static/js/index.js"></script>
+  <script defer src="static/js/index.js?v=carousel"></script>
 </head>
 <body>
+  <main>
+    <section class="hero publication-hero">
+      <div class="hero-body">
+        <div class="container is-max-desktop has-text-centered">
+          <img class="publication-logo" src="static/images/elasticdino-mascot.png" alt="ElasticDino mascot">
+          <h1 class="title publication-title">ElasticDino</h1>
+          <p class="publication-subtitle">Dense Semantic Features using Elastic Deformations</p>
 
+          <div class="publication-authors">
+            <span class="author-block">Ulysse Mizrahi</span>
+            <span class="author-block">Sean Zaretzky</span>
+            <span class="author-block">Amit Bermano</span>
+            <span class="author-block">Dov Danon</span>
+          </div>
+          <div class="publication-affiliation">Tel Aviv University</div>
 
-  <section class="hero">
-    <div class="hero-body">
-      <div class="container is-max-desktop">
-        <div class="columns is-centered">
-          <div class="column has-text-centered">
-            <img style="height:128px;width:128px;" src="static/images/elasticdino-mascot.png"></img>
-            <h1 class="title is-1 publication-title">ElasticDino</h1>
-            <div class="is-size-5 publication-authors">
-              <!-- Paper authors -->
-              <span class="author-block">
-                Ulysse Mizrahi,</span>
-                <span class="author-block">
-                  Amit Bermano</span>
-                  </div>
-
-                  <div class="is-size-5 publication-authors">
-                    <span class="author-block" style="font-size:0.7em;">Tel-Aviv University</span>
-                  </div>
-
-                  <div class="column has-text-centered">
-                    <div class="publication-links">
-                    
-
-                  <!-- Github link -->
-                  <span class="link-block">
-                    <a href="https://github.com/odusseys/ElasticDino" target="_blank"
-                    class="external-link button is-normal is-rounded is-dark">
-                    <span class="icon">
-                      <i class="fab fa-github"></i>
-                    </span>
-                    <span>Code</span>
-                  </a>
-                </span>
-
-                <!-- ArXiv abstract Link -->
-                <span class="link-block">
-                  <a href="https://arxiv.org/abs/<ARXIV PAPER ID>" target="_blank"
-                  class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                    <i class="ai ai-arxiv"></i>
-                  </span>
-                  <span>arXiv</span>
-                </a>
-              </span>
-            </div>
+          <div class="publication-links">
+            <a href="static/pdfs/elasticdino.pdf" target="_blank" rel="noopener noreferrer" class="button publication-button">
+              <span class="icon"><i class="fas fa-file-pdf"></i></span>
+              <span>Paper</span>
+            </a>
+            <a href="https://github.com/odusseys/ElasticDino" target="_blank" rel="noopener noreferrer" class="button publication-button">
+              <span class="icon"><i class="fab fa-github"></i></span>
+              <span>Code</span>
+            </a>
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-
-<!-- Teaser video-->
-<section class="hero teaser">
-  <div class="container is-max-desktop">
-    <div class="hero-body">
-      <!-- <video poster="" id="tree" autoplay controls muted loop height="100%">
-        <source src="static/videos/banner_video.mp4"
-        type="video/mp4">
-      </video> -->
-      <h2 class="subtitle has-text-centered">Dense Semantic Features using Elastic Deformations </h2>
-    </div>
-  </div>
-</section>
-<!-- End teaser video -->
-
-<!-- Paper abstract -->
-<section class="section hero is-light">
-  <div class="container is-max-desktop">
-    <div class="columns is-centered has-text-centered">
-      <div class="column is-four-fifths">
-        <h2 class="title is-3">Abstract</h2>
-        <div class="content has-text-justified">
+    <section class="section teaser-section">
+      <div class="container is-max-widescreen">
+        <figure class="paper-figure teaser-main">
+          <img src="static/images/paper-teaser-full.png" alt="ElasticDino teaser showing DINOv2 features, ElasticDino features, and downstream dense tasks">
+        </figure>
+        <div class="teaser-copy">
+          <h2 class="title is-3">Abstract</h2>
           <p>
-            Vision transformers (ViTs) are the backbone of countless vision tasks, including dense ones, such as segmentation or depth estimation. However, the quadratic complexity of self-attention limits feature resolution, and induces other locality related artifacts. Dense prediction hence requires significant, task-specific, computational and data collection efforts. In this work we introduce ElasticDino, an adapter on top of DinoV2, producing high-resolution feature maps that preserve the fine details of the input image. As a key insight, we observe that structure is consistent across channels, and can be simultaneously resolved and matched to the input image structure, which is of full-resolution. Using a lightweight, linear-complexity architecture of only deformation, convolution, and interpolation, we demonstrate crisp and consistent, artifact-free, full-resolution details. We find deformations to be an efficient tool to counteract the inherent smoothness of linear operations. To train the pipeline with no ground truth, we perform pixel-level projection of our output maps using slim MLP heads to predict a set of downstream dense tasks. We demonstrate ElasticDino enables significantly faster training of high-performance downstream models using far less training data. We further obtain state-of-the-art results on semantic segmentation, demonstrate data efficiency for depth estimation, and apply our method to two additional applications.  We argue that ElasticDino is recommended for many of the dense tasks currently employing pretrained backbones.
+            Vision transformers (ViTs) are the backbone of countless vision tasks, including dense ones, such as segmentation and depth estimation. However, the quadratic complexity of self-attention limits semantic feature resolution and induces spatial artifacts. Dense prediction hence requires significant task-specific, computational and data collection efforts. In this work, we introduce ElasticDino, an adapter for these backbones, which produces high-resolution feature maps that preserve the fine details of the input image. As a key insight, we observe that all channels display consistent artifacts, which can be simultaneously resolved and matched to the input image structure. Using a lightweight, fully convolutional architecture predicting only spatial deformations, ElasticDino produces pixel-aligned, artifact-free, full-resolution feature maps. We choose deformations for their ability to efficiently affect channels consistently and strictly preserve sharp semantics, avoiding otherwise inherent smoothness biases. Given the lack of ground truth, we employ pixel-level linear heads to predict a set of downstream dense tasks, guiding the deformation process. ElasticDino enables efficient and high-performance training of dense tasks &mdash; we demonstrate superior performance to current methods, and further obtain state-of-the-art results on semantic segmentation over a range of popular benchmarks. We argue that ElasticDino is recommended for many of the dense tasks currently employing pretrained attention-based backbones.
           </p>
         </div>
       </div>
-    </div>
-  </div>
-</section>
-<!-- End paper abstract -->
+    </section>
 
+    <section class="section">
+      <div class="container is-max-desktop">
+        <div class="content-block">
+          <p class="section-kicker">Motivation</p>
+          <h2 class="title is-3">DINO features are low resolution and prone to artifacts</h2>
+          <p>
+            Standard ViT backbones operate on image patches, often yielding 32x32 or 64x64 feature grids for images that downstream models need to reason about at full resolution. This introduces positional noise, feature bleeding across boundaries, and extra burden on task-specific decoders.
+          </p>
+        </div>
 
-<!-- Image carousel -->
-<section class="hero is-small">
-  <div class="hero-body">
-    <div class="container">
-      <div id="results-carousel" class="carousel results-carousel">
-       <div class="item">
-        <!-- Your image here -->
-        <img src="static/images/carousel1.jpg" alt="MY ALT TEXT"/>
-        <h2 class="subtitle has-text-centered">
-          First image description.
-        </h2>
+        <div class="figure-grid artifact-figure-grid">
+          <figure class="paper-figure">
+            <img src="static/images/paper-artifacts.png" alt="ViT feature artifacts across feature channels">
+            <figcaption>Patch-level features show positional artifacts and thickened boundaries.</figcaption>
+          </figure>
+          <figure class="paper-figure">
+            <img src="static/images/paper-channel-consistency.png" alt="Cross-channel consistency of ViT artifacts">
+            <figcaption>The artifacts are spatially consistent across channels, so one deformation field can correct all channels together.</figcaption>
+          </figure>
+        </div>
       </div>
-      <div class="item">
-        <!-- Your image here -->
-        <img src="static/images/carousel2.jpg" alt="MY ALT TEXT"/>
-        <h2 class="subtitle has-text-centered">
-          Second image description.
-        </h2>
-      </div>
-      <div class="item">
-        <!-- Your image here -->
-        <img src="static/images/carousel3.jpg" alt="MY ALT TEXT"/>
-        <h2 class="subtitle has-text-centered">
-         Third image description.
-       </h2>
-     </div>
-     <div class="item">
-      <!-- Your image here -->
-      <img src="static/images/carousel4.jpg" alt="MY ALT TEXT"/>
-      <h2 class="subtitle has-text-centered">
-        Fourth image description.
-      </h2>
-    </div>
-  </div>
-</div>
-</div>
-</section>
-<!-- End image carousel -->
+    </section>
 
+    <section class="section method-section">
+      <div class="container is-max-desktop">
+        <div class="content-block">
+          <p class="section-kicker">Method</p>
+          <h2 class="title is-3">Task-guided Elastic Deformations</h2>
+          <p>
+            ElasticDino alternates bilinear upsampling with lightweight Feature Deformation layers. Each layer reads the current semantic feature map and the image at the same resolution, predicts a 2D deformation field with depthwise-separable convolutional blocks, and warps the features instead of directly rewriting their values.
+          </p>
+        </div>
 
+        <figure class="paper-figure wide-figure">
+          <img src="static/images/paper-method-overview.png" alt="ElasticDino method overview">
+          <figcaption>Method overview. The input image is passed to the (Dino) backbone for the low resolution, artifact-full features. These are successively passed to a sequence feature-fixing layers and then bilinearly upsampled by a factor 2. Feature Deformation Layers project and concatenate both the image and the semantic features, which are fed to a series of depthwise residual blocks, that end up generating a deformation field that warps the feature map. Task heads induce the sole losses of the system. They are simple MLPs that operate on the individual pixel level. Each head is compared to the ground truth using a task-specific loss.</figcaption>
+        </figure>
 
-
-<!-- Youtube video -->
-<section class="hero is-small is-light">
-  <div class="hero-body">
-    <div class="container">
-      <!-- Paper video. -->
-      <h2 class="title is-3">Video Presentation</h2>
-      <div class="columns is-centered has-text-centered">
-        <div class="column is-four-fifths">
-          
-          <div class="publication-video">
-            <!-- Youtube embed code here -->
-            <iframe src="https://www.youtube.com/embed/JkaxUblCGz0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        <div class="insight-grid">
+          <div class="insight-card">
+            <span class="insight-icon"><i class="fas fa-vector-square"></i></span>
+            <h3>Shared Deformations</h3>
+            <p>Each Feature Deformation layer predicts a 2D warp field from the image and current feature map. The same spatial warp is applied to all channels, matching the channel-consistent structure of ViT artifacts while keeping computation lightweight.</p>
+          </div>
+          <div class="insight-card">
+            <span class="insight-icon"><i class="fas fa-compress-arrows-alt"></i></span>
+            <h3>Semantic Preservation</h3>
+            <p>The network warps existing features rather than directly rewriting feature values. Sampling from the original feature map preserves backbone semantics, discourages hallucinated task labels, and sharpens boundaries without smoothing away object identity.</p>
+          </div>
+          <div class="insight-card pixel-heads-card">
+            <span class="insight-icon"><i class="fas fa-layer-group"></i></span>
+            <h3>Pixel-Level Heads</h3>
+            <p>ElasticDino trains without ground-truth high-resolution DINO features. Instead, simple 1x1 task heads supervise every pixel for RGB, depth, semantic segmentation, normals, shading, albedo, residuals, and intrinsic decomposition.</p>
+            <p>Because the heads operate independently at each pixel, they cannot hide spatial mistakes with decoder context. The deformation layers must therefore align the frozen semantic features to image structure before the heads can solve the dense tasks.</p>
           </div>
         </div>
       </div>
+    </section>
+
+    <section class="section results-section">
+      <div class="container is-max-widescreen">
+        <div class="content-block">
+          <p class="section-kicker">Results</p>
+          <h2 class="title is-3">Full Benchmark Results</h2>
+          <p>
+            ElasticDino is evaluated on semantic segmentation, feature upsampling, depth estimation, and DINOv3 transfer. The complete benchmark tables from the paper are reproduced below, along with runtime and memory measurements.
+          </p>
+        </div>
+
+        <div class="results-tables">
+          <div class="table-wrap">
+            <h3>Semantic Segmentation</h3>
+            <p class="table-note">Validation Mean IoU for semantic segmentation benchmarks.</p>
+            <table class="benchmark-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Cscapes IoU ↑</th>
+                  <th>COCO IoU ↑</th>
+                  <th>ADE20k IoU ↑</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="ours-row"><td>ElasticDino-L</td><td>0.6875</td><td>0.6270</td><td>0.5299</td></tr>
+                <tr><td>OneFormer-sw-L</td><td>0.6412</td><td>0.6264</td><td>0.5109</td></tr>
+                <tr><td>Mask2Former-sw-L</td><td>0.5986</td><td>0.6239</td><td>0.4928</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrap table-wrap-wide">
+            <h3>Feature Upsampling</h3>
+            <p class="table-note">Comparison of upsampling methods using the JAFAR benchmark protocol. Bold = best, underline = second best in the paper.</p>
+            <table class="benchmark-table is-wide">
+              <thead>
+                <tr class="group-row"><th rowspan="3">Method</th><th colspan="8">Semantic Segmentation</th><th colspan="2">Depth Estimation</th></tr>
+                <tr class="group-row"><th colspan="2">COCO</th><th colspan="2">VOC</th><th colspan="2">ADE20k</th><th colspan="2">Cityscapes</th><th colspan="2">COCO</th></tr>
+                <tr><th>mIoU ↑</th><th>Acc ↑</th><th>mIoU ↑</th><th>Acc ↑</th><th>mIoU ↑</th><th>Acc ↑</th><th>mIoU ↑</th><th>Acc ↑</th><th>δ1 ↑</th><th>RMSE ↓</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Nearest</td><td>56.17</td><td>76.97</td><td>76.41</td><td>93.80</td><td>37.27</td><td>71.91</td><td>54.05</td><td>90.36</td><td>58.08</td><td>0.70</td></tr>
+                <tr><td>Bilinear</td><td>59.03</td><td>79.07</td><td>80.70</td><td>95.17</td><td>39.23</td><td>73.69</td><td>59.37</td><td>92.47</td><td>59.92</td><td>0.66</td></tr>
+                <tr><td>FeatUp</td><td>60.10</td><td>79.95</td><td>81.08</td><td>95.32</td><td>38.82</td><td>73.74</td><td>56.06</td><td>91.86</td><td>61.69</td><td>0.64</td></tr>
+                <tr><td>LoftUp</td><td>61.62</td><td>81.11</td><td>84.18</td><td>96.22</td><td>41.51</td><td>75.41</td><td>62.13</td><td>93.53</td><td>58.01</td><td>0.68</td></tr>
+                <tr><td>JAFAR</td><td>60.32</td><td>80.30</td><td>84.19</td><td>96.18</td><td>40.16</td><td>74.39</td><td>61.58</td><td>93.45</td><td>60.05</td><td>0.65</td></tr>
+                <tr><td>AnyUp</td><td>60.68</td><td>80.59</td><td>83.81</td><td>96.13</td><td>40.39</td><td>74.76</td><td>60.99</td><td>93.37</td><td>60.65</td><td>0.64</td></tr>
+                <tr class="ours-row"><td>ED (ours)</td><td>62.72</td><td>81.74</td><td>86.00</td><td>96.78</td><td>42.10</td><td>76.00</td><td>61.33</td><td>93.44</td><td>64.14</td><td>0.57</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrap table-wrap-wide">
+            <h3>DINOv3</h3>
+            <p class="table-note">Comparison of AnyUp and ElasticDino over the DINOv3 backbone using the JAFAR benchmark protocol.</p>
+            <table class="benchmark-table is-wide">
+              <thead>
+                <tr class="group-row"><th rowspan="3">Method</th><th colspan="8">Semantic Segmentation</th><th colspan="2">Depth Estimation</th></tr>
+                <tr class="group-row"><th colspan="2">COCO</th><th colspan="2">VOC</th><th colspan="2">ADE20k</th><th colspan="2">Cityscapes</th><th colspan="2">COCO</th></tr>
+                <tr><th>mIoU ↑</th><th>Acc ↑</th><th>mIoU ↑</th><th>Acc ↑</th><th>mIoU ↑</th><th>Acc ↑</th><th>mIoU ↑</th><th>Acc ↑</th><th>δ1 ↑</th><th>RMSE ↓</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>AnyUp</td><td>30.03</td><td>57.88</td><td>23.66</td><td>76.46</td><td>13.00</td><td>53.99</td><td>19.52</td><td>81.18</td><td>54.81</td><td>0.77</td></tr>
+                <tr class="ours-row"><td>ED (ours)</td><td>64.04</td><td>82.43</td><td>86.26</td><td>96.89</td><td>44.57</td><td>77.03</td><td>62.91</td><td>94.03</td><td>61.10</td><td>0.62</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrap">
+            <h3>Runtime and Memory</h3>
+            <p class="table-note">Run time comparisons of ElasticDino with competing feature upscaling works over DINOv2. Parameter counts are omitted.</p>
+            <table class="benchmark-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>ED (ours)</th>
+                  <th>AnyUp</th>
+                  <th>LoftUp</th>
+                  <th>JAFAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Avg Time (fw pass) ↓</td><td class="best-value">186.32 ms</td><td>762.82 ms</td><td>747.29 ms</td><td>318.05 ms</td></tr>
+                <tr><td>Peak mem (fw pass) ↓</td><td class="best-value">923.01 MB</td><td>1652.09 MB</td><td>8310.90 MB</td><td>7337.48 MB</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="content-block carousel-heading">
+          <h3 class="title is-4">Qualitative Results</h3>
+          <p>
+            Additional examples from the paper show ElasticDino producing sharper dense predictions and cleaner high-resolution feature maps across segmentation, depth, and feature upsampling comparisons.
+          </p>
+        </div>
+
+        <div class="result-carousel" data-carousel aria-label="ElasticDino qualitative result carousel">
+          <button class="carousel-nav carousel-nav-prev" type="button" data-carousel-prev aria-label="Previous qualitative result">
+            <i class="fas fa-chevron-left" aria-hidden="true"></i>
+          </button>
+          <div class="carousel-viewport">
+            <figure class="carousel-slide is-active">
+              <button class="carousel-image-button" type="button" data-modal-image="static/images/carousel/feature_comparison.png" data-modal-caption="Feature PCA comparison">
+                <img src="static/images/carousel/feature_comparison.png" alt="Feature PCA comparison across Input, Low-Res, JAFAR, LoftUp, AnyUp, and ED ours">
+              </button>
+              <figcaption>Feature PCA comparison</figcaption>
+            </figure>
+            <figure class="carousel-slide" aria-hidden="true">
+              <button class="carousel-image-button" type="button" data-modal-image="static/images/carousel/intrinsics.png" data-modal-caption="Intrinsic decomposition" tabindex="-1">
+                <img src="static/images/carousel/intrinsics.png" alt="Intrinsic decomposition examples for feature PCA, RGB, depth, segmentation, shading, albedo, residuals, and normals">
+              </button>
+              <figcaption>Intrinsic decomposition</figcaption>
+            </figure>
+            <figure class="carousel-slide" aria-hidden="true">
+              <button class="carousel-image-button" type="button" data-modal-image="static/images/carousel/seg.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                <img src="static/images/carousel/seg.png" alt="Semantic segmentation comparison across Input, JAFAR, AnyUp, LoftUp, ED ours, and GT">
+              </button>
+              <figcaption>Semantic segmentation</figcaption>
+            </figure>
+            <figure class="carousel-slide" aria-hidden="true">
+              <button class="carousel-image-button" type="button" data-modal-image="static/images/carousel/depth.png" data-modal-caption="Depth estimation" tabindex="-1">
+                <img src="static/images/carousel/depth.png" alt="Depth estimation comparison across Input, JAFAR, AnyUp, LoftUp, ED ours, and GT">
+              </button>
+              <figcaption>Depth estimation</figcaption>
+            </figure>
+          </div>
+          <button class="carousel-nav carousel-nav-next" type="button" data-carousel-next aria-label="Next qualitative result">
+            <i class="fas fa-chevron-right" aria-hidden="true"></i>
+          </button>
+          <p class="carousel-status sr-only" aria-live="polite">Slide 1 of 4: Feature PCA comparison</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="image-modal" id="result-modal" hidden role="dialog" aria-modal="true" aria-label="Full-size qualitative result">
+      <button class="modal-close" type="button" aria-label="Close full-size result">
+        <i class="fas fa-times" aria-hidden="true"></i>
+      </button>
+      <figure class="modal-figure">
+        <img src="" alt="">
+        <figcaption id="result-modal-caption"></figcaption>
+      </figure>
     </div>
-  </div>
-</section>
-<!-- End youtube video -->
 
-
-<!--BibTex citation -->
-  <section class="section" id="BibTeX">
-    <div class="container is-max-desktop content">
-      <h2 class="title">BibTeX</h2>
-      <pre><code>BibTex Code Here</code></pre>
-    </div>
-</section>
-<!--End BibTex citation -->
-
+    <section class="section" id="BibTeX">
+      <div class="container is-max-desktop content">
+        <h2 class="title">Citation</h2>
+        <pre><code>@misc{mizrahi2026elasticdino,
+  title={ElasticDino: Dense Semantic Features using Elastic Deformations},
+  author={Mizrahi, Ulysse and Zaretzky, Sean and Bermano, Amit and Danon, Dov},
+  year={2026}
+}</code></pre>
+      </div>
+    </section>
+  </main>
 
   <footer class="footer">
-  <div class="container">
-    <div class="columns is-centered">
-      <div class="column is-8">
-        <div class="content">
-
-          <p>
-            This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
-            You are free to borrow the source code of this website, we just ask that you link back to this page in the footer. <br> This website is licensed under a <a rel="license"  href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative
-            Commons Attribution-ShareAlike 4.0 International License</a>.
-          </p>
-
-        </div>
-      </div>
+    <div class="container is-max-desktop">
+      <p>
+        Page adapted from the academic project-page template family used by Nerfies and related project pages. Reference layout inspiration: <a href="https://wimmerth.github.io/anyup/" target="_blank" rel="noopener noreferrer">AnyUp</a>.
+      </p>
     </div>
-  </div>
-</footer>
-
-  </body>
-  </html>
+  </footer>
+</body>
+</html>
