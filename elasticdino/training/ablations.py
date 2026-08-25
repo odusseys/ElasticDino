@@ -35,7 +35,7 @@ class AblateDeformationsStage(nn.Module):
 import math
 
 class AblateDeformations(nn.Module):
-  def __init__(self, config, dino_repo):
+  def __init__(self, config, dino_repo='facebookresearch/dinov2'):
     super().__init__()
     self.config = config
 
@@ -52,8 +52,12 @@ class AblateDeformations(nn.Module):
 
     self.dino = DinoV2(dino_repo,config["dino_model"], )
 
-  def forward(self, images, return_all_scales=False, return_original_features=False):
-    features_in = self.dino.get_features_for_tensor(resize_for_dino(images, self.config["start_size"]))
+  def forward(self, images, return_all_scales=False, return_original_features=False, return_class_token=False):
+    dino_images = resize_for_dino(images, self.config["start_size"])
+    if return_class_token:
+      features_in, class_token = self.dino.get_features_and_class_token_for_tensor(dino_images)
+    else:
+      features_in = self.dino.get_features_for_tensor(dino_images)
     features = features_in    
     images = nn.functional.interpolate(images, self.config["target_size"], mode="bilinear", antialias=True)
     n = len(self.stages)
@@ -66,12 +70,15 @@ class AblateDeformations(nn.Module):
       if i < n - 1:
         current_size *= 2
         features = torch.nn.functional.interpolate(features, current_size, mode="nearest")
+    if not return_all_scales and not return_original_features and not return_class_token:
+      return features
+    out = dict(deformed_features=features)
     if return_all_scales:
-      out = results
-    else:
-      out = features
+      out["all_scales"] = results
     if return_original_features:
-      return out, features_in
+      out["original_features"] = features_in
+    if return_class_token:
+      out["class_token"] = class_token
     return out
 
   def parameters(self):
@@ -79,6 +86,7 @@ class AblateDeformations(nn.Module):
   
   def train(self, x=True):
     self.stages.train(x)
+    return self
 
 
 class AblationTaskHeads(nn.Module):
@@ -135,7 +143,14 @@ class HypersimTaskHeads(nn.Module):
 
 HYPERSIM_TASKS = ["reproduced", "diffuse_illuminations", "diffuse_reflectances", "residuals", "normal_bump_cams"]
 
-def ablation_loss(results_list, batch, features, min_scale, use_blur):
+def ablation_loss(
+  results_list,
+  batch,
+  features,
+  min_scale,
+  use_blur,
+  cross_resolution=True,
+):
   rpr = 0
   diffl = 0
   diffr = 0
@@ -148,9 +163,20 @@ def ablation_loss(results_list, batch, features, min_scale, use_blur):
       features = torch.nn.functional.interpolate(features, scale_factor=0.5, mode="bilinear")
 
   for r, f in results_list:
-    resolution = batch["images"].shape[-1]
-    scale = 1.0
-    while resolution >= min_scale:
+    max_resolution = batch["images"].shape[-1]
+    if cross_resolution:
+      resolutions = []
+      resolution = max_resolution
+      scale = 1.0
+      while resolution >= min_scale:
+        resolutions.append((resolution, scale))
+        resolution //= 2
+        scale *= 2
+    else:
+      resolution = f.shape[-1]
+      resolutions = [(resolution, max_resolution / resolution)]
+
+    for resolution, scale in resolutions:
       n += scale
       # Check if key exists in dictionary before attempting to access it
       rpr += scale * reproduction_loss(r.get("reproduced"), batch["images"], resolution, order=0) if "reproduced" in r else 0
@@ -162,8 +188,6 @@ def ablation_loss(results_list, batch, features, min_scale, use_blur):
       resl += scale * reproduction_loss(r.get("residuals"), batch["residuals"], resolution, order=2) if "residuals" in r else 0
         
       norml += scale * reproduction_loss(r.get("normal_bump_cams"), batch["normal_bump_cams"], resolution, order=2) if "normal_bump_cams" in r else 0
-      resolution //= 2
-      scale *= 2
         
     if use_blur:
       downscaled = torch.nn.functional.interpolate(f, features.shape[-1], mode="bilinear") 

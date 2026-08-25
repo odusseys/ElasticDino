@@ -242,12 +242,18 @@ class ElasticDino(nn.Module):
 
     self.dino = DinoV2(dino_repo, config["dino_model"])
 
-  def forward(self, images, return_all_scales=False, return_original_features=False, return_displacements=False, n_hidden_layers=None):
+  def forward(self, images, return_all_scales=False, return_original_features=False, return_displacements=False, n_hidden_layers=None, return_class_token=False):
     with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
       if n_hidden_layers is None:
         additional_inputs = []
-        features_in = self.dino.get_features_for_tensor(resize_for_dino(images, self.config["start_size"]))
+        dino_images = resize_for_dino(images, self.config["start_size"])
+        if return_class_token:
+          features_in, class_token = self.dino.get_features_and_class_token_for_tensor(dino_images)
+        else:
+          features_in = self.dino.get_features_for_tensor(dino_images)
       else:
+        if return_class_token:
+          raise ValueError("return_class_token is not supported with n_hidden_layers")
         additional_inputs = self.dino.get_intermediate_features_for_tensor(resize_for_dino(images, self.config["start_size"]), n_hidden_layers)
         features_in = additional_inputs.pop(-1)
       features = features_in
@@ -272,7 +278,7 @@ class ElasticDino(nn.Module):
           current_size *= 2
           features = torch.nn.functional.interpolate(features, current_size, mode="nearest")
       
-      if (not return_all_scales) and (not return_original_features) and (not return_displacements) and n_hidden_layers is None:
+      if (not return_all_scales) and (not return_original_features) and (not return_displacements) and n_hidden_layers is None and (not return_class_token):
         return features
 
       out = dict(deformed_features=features)
@@ -285,6 +291,8 @@ class ElasticDino(nn.Module):
       if n_hidden_layers is not None:
         additional_inputs.append(features)
         out["hidden_layers"] = additional_inputs
+      if return_class_token:
+        out["class_token"] = class_token
       
       del additional_inputs
       del all_displacements
@@ -300,6 +308,7 @@ class ElasticDino(nn.Module):
   
   def train(self, value=True):
     self.stages.train(value)
+    return self
   
   def from_pretrained(model_name, checkpoint_path=None, dino_repo='facebookresearch/dinov2'):
     config = CONFIGS[model_name]

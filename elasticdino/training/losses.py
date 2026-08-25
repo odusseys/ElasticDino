@@ -4,26 +4,26 @@ import math
 import torch.nn as nn
 
 
-@torch.compile(dynamic=True)
 def structural_loss(x, y):
   return ((x - y) ** 2).mean() + kornia.losses.ssim_loss(x, y, 11)
 
-@torch.compile(dynamic=True)
 def gradient_loss(reproduced, truth):
   B, C, W, H = reproduced.shape
   gr = kornia.filters.spatial_gradient(reproduced).reshape((B, 2 * C, W, H))
   gt = kornia.filters.spatial_gradient(truth).reshape((B, 2 * C, W, H))
   return structural_loss(gr, gt)
 
-@torch.compile(dynamic=True)
 def laplacian_loss(reproduced, truth):
   lr = kornia.filters.laplacian(reproduced, 3)
   lt = kornia.filters.laplacian(truth, 3)
   return structural_loss(lr, lt)
 
 def reproduction_loss(reproduced, truth, resolution, order=0):
-  reproduced = torch.nn.functional.interpolate(reproduced, resolution, mode="bilinear", align_corners=False, antialias=True)
-  truth = torch.nn.functional.interpolate(truth, resolution, mode="bilinear", align_corners=False, antialias=True)
+  target_size = (resolution, resolution)
+  if reproduced.shape[-2:] != target_size:
+    reproduced = torch.nn.functional.interpolate(reproduced, target_size, mode="bilinear", align_corners=False, antialias=True)
+  if truth.shape[-2:] != target_size:
+    truth = torch.nn.functional.interpolate(truth, target_size, mode="bilinear", align_corners=False, antialias=True)
   loss = structural_loss(reproduced, truth)
   if order > 0:
     loss += gradient_loss(reproduced, truth)

@@ -1,2 +1,7 @@
 **/__pycache__
 .vscode
+/training_logs/
+/slurm_logs/
+/slurm-*.out
+/slurm-*.err
+elasticdino-runs
