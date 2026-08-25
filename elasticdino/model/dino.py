@@ -28,15 +28,17 @@ import torch.nn as nn
 DINO_CACHE = {}
 
 class DinoV2(nn.Module):
-  def __init__(self, dino_repo, dino_model):
+  def __init__(self, dino_repo, dino_model, use_registers=True):
     super().__init__()
     # logger.info("Loading DinoV2 backbone")
-    if dino_model in DINO_CACHE:
-      dino_backbone = DINO_CACHE[dino_model]
+    cache_key = (dino_repo, dino_model, use_registers)
+    if cache_key in DINO_CACHE:
+      dino_backbone = DINO_CACHE[cache_key]
     else:
       source = "github" if dino_repo == 'facebookresearch/dinov2' else "local"
-      dino_backbone = torch.hub.load(dino_repo, f'dinov2_vit{dino_model}14_reg', source=source)
-      DINO_CACHE[dino_model] = dino_backbone
+      model_name = f'dinov2_vit{dino_model}14' + ('_reg' if use_registers else '')
+      dino_backbone = torch.hub.load(dino_repo, model_name, source=source)
+      DINO_CACHE[cache_key] = dino_backbone
 
     # logger.info("DinoV2 backbone loaded")
     dino_backbone.requires_grad_(False)

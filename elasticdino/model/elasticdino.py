@@ -240,7 +240,11 @@ class ElasticDino(nn.Module):
         ElasticDinoStage(layer_configs[res], n_features_in, n_image_features) for res in layer_configs
     ])
 
-    self.dino = DinoV2(dino_repo, config["dino_model"])
+    self.dino = DinoV2(
+      dino_repo,
+      config["dino_model"],
+      use_registers=config.get("use_registers", True),
+    )
 
   def forward(self, images, return_all_scales=False, return_original_features=False, return_displacements=False, n_hidden_layers=None, return_class_token=False):
     with torch.amp.autocast(device_type="cuda", dtype=torch.float16):

@@ -37,8 +37,9 @@ EARLY_STOPPING_PATIENCE = 2
 CROSS_RESOLUTION_LOSS = True
 
 MODEL_CONFIG = dict(
-    dino_model="b",
-    n_features_in=768,
+    dino_model="s",
+    n_features_in=384,
+    use_registers=False,
     layers={
         32: dict(hidden_features=256, n_blocks=4, layers_per_block=4),
         64: dict(hidden_features=256, n_blocks=4, layers_per_block=3),
@@ -181,6 +182,11 @@ def save_upscaler_checkpoint(
     step,
     epoch=None,
     validation_loss=None,
+    optimizer=None,
+    ema_loss=None,
+    best_validation_loss=None,
+    epochs_without_improvement=0,
+    epoch_complete=False,
 ):
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
@@ -188,10 +194,15 @@ def save_upscaler_checkpoint(
             {
                 "step": step,
                 "epoch": epoch,
+                "epoch_complete": epoch_complete,
                 "validation_loss": validation_loss,
+                "ema_loss": ema_loss,
+                "best_validation_loss": best_validation_loss,
+                "epochs_without_improvement": epochs_without_improvement,
                 "model_config": MODEL_CONFIG,
                 "upscaler": checkpoint_state(accelerator, upscaler, exclude_dino=True),
                 "task_heads": checkpoint_state(accelerator, task_heads),
+                "optimizer": optimizer.state_dict() if optimizer is not None else None,
             },
             path,
         )
@@ -200,6 +211,100 @@ def save_upscaler_checkpoint(
 def append_record(path, record):
     with open(path, "a") as file:
         file.write(json.dumps(record) + "\n")
+
+
+def write_run_state(run_dir, stage):
+    state_path = run_dir / "run_state.json"
+    temporary_path = run_dir / "run_state.tmp"
+    with open(temporary_path, "w") as file:
+        json.dump({"stage": stage, "updated_at": datetime.now().isoformat()}, file, indent=2)
+    os.replace(temporary_path, state_path)
+
+
+def get_run_stage(run_dir):
+    state_path = run_dir / "run_state.json"
+    if state_path.is_file():
+        with open(state_path) as file:
+            stage = json.load(file).get("stage")
+        if stage == "complete":
+            return stage
+
+    if (run_dir / "last_depth_probe.pt").is_file():
+        return "complete"
+    if (run_dir / "last_upscaler.pt").is_file():
+        return "depth"
+    if state_path.is_file() and stage in {"upscaler", "depth"}:
+        return stage
+    if (run_dir / "best_depth_probe.pt").is_file() or any(
+        (run_dir / "checkpoints").glob("depth-*.pt")
+    ):
+        return "depth"
+    return "upscaler"
+
+
+def latest_stage_checkpoint(run_dir, stage):
+    checkpoint_dir = run_dir / "checkpoints"
+    candidates = list(checkpoint_dir.glob(f"{stage}-*.pt"))
+    best_name = "best_upscaler.pt" if stage == "upscaler" else "best_depth_probe.pt"
+    best_path = run_dir / best_name
+    if best_path.is_file():
+        candidates.append(best_path)
+    return max(candidates, key=lambda path: path.stat().st_mtime) if candidates else None
+
+
+def run_is_compatible(run_dir, args):
+    config_path = run_dir / "config.json"
+    if not config_path.is_file():
+        return False
+    with open(config_path) as file:
+        config = json.load(file)
+
+    saved_model_config = config.get("model_config")
+    if saved_model_config is None:
+        checkpoint_paths = [
+            run_dir / "last_upscaler.pt",
+            run_dir / "best_upscaler.pt",
+            latest_stage_checkpoint(run_dir, "upscaler"),
+        ]
+        checkpoint_path = next(
+            (path for path in checkpoint_paths if path is not None and path.is_file()),
+            None,
+        )
+        if checkpoint_path is None:
+            return False
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        saved_model_config = checkpoint.get("model_config")
+
+    expected = {
+        "ablation": args.ablation,
+        "head_ablation_number": args.head_ablation_number,
+        "dataset_root": str(Path(args.dataset_root).resolve()),
+        "test": args.test,
+    }
+    actual = {
+        "ablation": config.get("ablation"),
+        "head_ablation_number": config.get("head_ablation_number"),
+        "dataset_root": str(Path(config.get("dataset_root", "")).resolve()),
+        "test": config.get("test", False),
+    }
+    normalized_model_config = json.loads(json.dumps(MODEL_CONFIG))
+    return saved_model_config == normalized_model_config and actual == expected
+
+
+def prepare_upscaler_for_depth(args, accelerator, run_dir):
+    best_checkpoint_path = run_dir / "best_upscaler.pt"
+    if not best_checkpoint_path.is_file():
+        raise RuntimeError(f"Cannot resume depth stage without {best_checkpoint_path}")
+    upscaler, _ = make_upscaler_and_heads(args.ablation, args.head_ablation_number)
+    upscaler = accelerator.prepare(upscaler)
+    checkpoint = load_upscaler_checkpoint(best_checkpoint_path, accelerator, upscaler)
+    upscaler.eval()
+    upscaler.requires_grad_(False)
+    accelerator.print(
+        f"Loaded best upscaler checkpoint: {best_checkpoint_path} "
+        f"(validation_loss={checkpoint.get('validation_loss')})"
+    )
+    return upscaler
 
 
 def update_early_stopping(validation_loss, best_validation_loss, epochs_without_improvement):
@@ -267,6 +372,17 @@ def load_upscaler_checkpoint(path, accelerator, upscaler):
     missing, unexpected = model.load_state_dict(checkpoint["upscaler"], strict=False)
     if unexpected or any(not key.startswith("dino.") for key in missing):
         raise RuntimeError(f"Could not load best upscaler checkpoint: missing={missing}, unexpected={unexpected}")
+    return checkpoint
+
+
+def resume_upscaler_checkpoint(path, accelerator, upscaler, task_heads, optimizer):
+    checkpoint = load_upscaler_checkpoint(path, accelerator, upscaler)
+    accelerator.unwrap_model(task_heads).load_state_dict(checkpoint["task_heads"])
+    if checkpoint.get("optimizer") is not None:
+        optimizer.load_state_dict(checkpoint["optimizer"])
+    else:
+        accelerator.print(f"Checkpoint {path} has no optimizer state; resuming with a fresh optimizer")
+    return checkpoint
 
 
 def train_upscaler(
@@ -277,6 +393,7 @@ def train_upscaler(
     run_dir,
     training_loss_path,
     validation_loss_path,
+    resume_checkpoint=None,
 ):
     upscaler, task_heads = make_upscaler_and_heads(args.ablation, args.head_ablation_number)
     optimizer = torch.optim.AdamW(
@@ -313,7 +430,29 @@ def train_upscaler(
     best_validation_loss = float("inf")
     epochs_without_improvement = 0
     best_checkpoint_path = run_dir / "best_upscaler.pt"
-    for epoch in range(args.upscaler_epochs):
+    start_epoch = 0
+    validation_loss = float("inf")
+    if resume_checkpoint is not None:
+        checkpoint = resume_upscaler_checkpoint(
+            resume_checkpoint,
+            accelerator,
+            upscaler,
+            task_heads,
+            optimizer,
+        )
+        step = checkpoint.get("step", 0)
+        ema_loss = checkpoint.get("ema_loss")
+        validation_loss = checkpoint.get("validation_loss") or float("inf")
+        best_validation_loss = checkpoint.get("best_validation_loss") or validation_loss
+        epochs_without_improvement = checkpoint.get("epochs_without_improvement", 0)
+        checkpoint_epoch = checkpoint.get("epoch") or 1
+        start_epoch = checkpoint_epoch if checkpoint.get("epoch_complete", False) else checkpoint_epoch - 1
+        accelerator.print(
+            f"Resuming upscaler from {resume_checkpoint} at epoch {start_epoch + 1}, step {step}"
+        )
+
+    epoch = max(start_epoch - 1, 0)
+    for epoch in range(start_epoch, args.upscaler_epochs):
         upscaler.train()
         task_heads.train()
         progress = tqdm(
@@ -322,7 +461,10 @@ def train_upscaler(
             disable=not accelerator.is_local_main_process,
             dynamic_ncols=True,
         )
-        for values in progress:
+        for batch_index, values in enumerate(progress):
+            if args.max_upscaler_steps and step >= args.max_upscaler_steps:
+                stop = True
+                break
             step += 1
             batch = make_ablation_batch(values)
             optimizer.zero_grad()
@@ -357,6 +499,11 @@ def train_upscaler(
                     upscaler,
                     task_heads,
                     step,
+                    epoch=epoch + 1,
+                    optimizer=optimizer,
+                    ema_loss=ema_loss,
+                    best_validation_loss=best_validation_loss,
+                    epochs_without_improvement=epochs_without_improvement,
                 )
             if args.max_upscaler_steps and step >= args.max_upscaler_steps:
                 stop = True
@@ -382,6 +529,11 @@ def train_upscaler(
                 step,
                 epoch=epoch + 1,
                 validation_loss=validation_loss,
+                optimizer=optimizer,
+                ema_loss=ema_loss,
+                best_validation_loss=best_validation_loss,
+                epochs_without_improvement=epochs_without_improvement,
+                epoch_complete=True,
             )
         if accelerator.is_main_process:
             append_record(
@@ -398,6 +550,20 @@ def train_upscaler(
                 f"upscaler epoch={epoch + 1} val_loss={validation_loss:.6f} "
                 f"best={is_best} patience={epochs_without_improvement}/{EARLY_STOPPING_PATIENCE}"
             )
+        save_upscaler_checkpoint(
+            run_dir / "checkpoints" / f"upscaler-{step}.pt",
+            accelerator,
+            upscaler,
+            task_heads,
+            step,
+            epoch=epoch + 1,
+            validation_loss=validation_loss,
+            optimizer=optimizer,
+            ema_loss=ema_loss,
+            best_validation_loss=best_validation_loss,
+            epochs_without_improvement=epochs_without_improvement,
+            epoch_complete=True,
+        )
         early_stop = epochs_without_improvement >= EARLY_STOPPING_PATIENCE
         if early_stop:
             accelerator.print(
@@ -415,6 +581,11 @@ def train_upscaler(
         step,
         epoch=epoch + 1,
         validation_loss=validation_loss,
+        optimizer=optimizer,
+        ema_loss=ema_loss,
+        best_validation_loss=best_validation_loss,
+        epochs_without_improvement=epochs_without_improvement,
+        epoch_complete=True,
     )
     load_upscaler_checkpoint(best_checkpoint_path, accelerator, upscaler)
     accelerator.print(
@@ -591,6 +762,13 @@ def save_depth_checkpoint(
     epoch,
     validation_loss,
     metrics,
+    scheduler=None,
+    ema_loss=None,
+    best_validation_loss=None,
+    best_metrics=None,
+    epochs_without_improvement=0,
+    history=None,
+    epoch_complete=False,
 ):
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
@@ -598,9 +776,16 @@ def save_depth_checkpoint(
             {
                 "step": step,
                 "epoch": epoch,
+                "epoch_complete": epoch_complete,
                 "validation_loss": validation_loss,
                 "depth_probe": checkpoint_state(accelerator, probe),
                 "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict() if scheduler is not None else None,
+                "ema_loss": ema_loss,
+                "best_validation_loss": best_validation_loss,
+                "best_metrics": best_metrics,
+                "epochs_without_improvement": epochs_without_improvement,
+                "history": history,
                 "metrics": metrics,
             },
             path,
@@ -611,6 +796,16 @@ def load_depth_checkpoint(path, accelerator, probe):
     accelerator.wait_for_everyone()
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     accelerator.unwrap_model(probe).load_state_dict(checkpoint["depth_probe"])
+    return checkpoint
+
+
+def resume_depth_checkpoint(path, accelerator, probe, optimizer, scheduler):
+    checkpoint = load_depth_checkpoint(path, accelerator, probe)
+    if checkpoint.get("optimizer") is not None:
+        optimizer.load_state_dict(checkpoint["optimizer"])
+    if checkpoint.get("scheduler") is not None:
+        scheduler.load_state_dict(checkpoint["scheduler"])
+    return checkpoint
 
 
 def train_depth_probe(
@@ -622,6 +817,7 @@ def train_depth_probe(
     run_dir,
     training_loss_path,
     validation_path,
+    resume_checkpoint=None,
 ):
     train_dataset = HypersimDepthProbeDataset(train_samples, args.depth_image_size)
     val_dataset = HypersimDepthProbeDataset(val_samples, args.depth_image_size)
@@ -659,9 +855,36 @@ def train_depth_probe(
     best_metrics = None
     epochs_without_improvement = 0
     best_checkpoint_path = run_dir / "best_depth_probe.pt"
-    for epoch in range(args.depth_epochs):
+    start_epoch = 0
+    validation_loss = float("inf")
+    metrics = None
+    if resume_checkpoint is not None:
+        checkpoint = resume_depth_checkpoint(
+            resume_checkpoint,
+            accelerator,
+            probe,
+            optimizer,
+            scheduler,
+        )
+        step = checkpoint.get("step", 0)
+        ema_loss = checkpoint.get("ema_loss")
+        validation_loss = checkpoint.get("validation_loss") or float("inf")
+        metrics = checkpoint.get("metrics")
+        best_validation_loss = checkpoint.get("best_validation_loss") or validation_loss
+        best_metrics = checkpoint.get("best_metrics") or metrics
+        epochs_without_improvement = checkpoint.get("epochs_without_improvement", 0)
+        history = checkpoint.get("history") or []
+        checkpoint_epoch = checkpoint.get("epoch") or 1
+        start_epoch = checkpoint_epoch if checkpoint.get("epoch_complete", False) else checkpoint_epoch - 1
+        accelerator.print(
+            f"Resuming depth probe from {resume_checkpoint} at epoch {start_epoch + 1}, step {step}"
+        )
+
+    epoch = max(start_epoch - 1, 0)
+    for epoch in range(start_epoch, args.depth_epochs):
         probe.train()
         total_loss = 0.0
+        processed_batches = 0
         progress = tqdm(
             train_loader,
             desc=f"depth epoch {epoch + 1}/{args.depth_epochs}",
@@ -669,6 +892,9 @@ def train_depth_probe(
             dynamic_ncols=True,
         )
         for batch_index, images in enumerate(progress):
+            if args.max_depth_steps and step >= args.max_depth_steps:
+                stop = True
+                break
             if random.random() < 0.5:
                 images = torch.flip(images, dims=[3])
             optimizer.zero_grad()
@@ -680,6 +906,7 @@ def train_depth_probe(
             scheduler.step()
 
             step += 1
+            processed_batches += 1
             loss_value = loss.detach().item()
             total_loss += loss_value
             ema_loss = loss_value if ema_loss is None else 0.97 * ema_loss + 0.03 * loss_value
@@ -705,6 +932,23 @@ def train_depth_probe(
                         f"metrics={json.dumps(validation_metrics)}"
                     )
                 probe.train()
+            if args.save_interval and step % args.save_interval == 0:
+                save_depth_checkpoint(
+                    run_dir / "checkpoints" / f"depth-{step}.pt",
+                    accelerator,
+                    probe,
+                    optimizer,
+                    step,
+                    epoch + 1,
+                    validation_loss,
+                    metrics,
+                    scheduler=scheduler,
+                    ema_loss=ema_loss,
+                    best_validation_loss=best_validation_loss,
+                    best_metrics=best_metrics,
+                    epochs_without_improvement=epochs_without_improvement,
+                    history=history,
+                )
             if args.max_depth_steps and step >= args.max_depth_steps:
                 stop = True
                 break
@@ -728,11 +972,18 @@ def train_depth_probe(
                 epoch + 1,
                 validation_loss,
                 metrics,
+                scheduler=scheduler,
+                ema_loss=ema_loss,
+                best_validation_loss=best_validation_loss,
+                best_metrics=best_metrics,
+                epochs_without_improvement=epochs_without_improvement,
+                history=history,
+                epoch_complete=True,
             )
         if accelerator.is_main_process:
             record = {
                 "epoch": epoch + 1,
-                "train_loss": total_loss / (batch_index + 1),
+                "train_loss": total_loss / processed_batches if processed_batches else ema_loss,
                 "validation_loss": validation_loss,
                 "metrics": metrics,
                 "is_best": is_best,
@@ -742,6 +993,23 @@ def train_depth_probe(
             print(json.dumps(record, indent=2))
             with open(run_dir / "depth_metrics.json", "w") as file:
                 json.dump(history, file, indent=2)
+        save_depth_checkpoint(
+            run_dir / "checkpoints" / f"depth-{step}.pt",
+            accelerator,
+            probe,
+            optimizer,
+            step,
+            epoch + 1,
+            validation_loss,
+            metrics,
+            scheduler=scheduler,
+            ema_loss=ema_loss,
+            best_validation_loss=best_validation_loss,
+            best_metrics=best_metrics,
+            epochs_without_improvement=epochs_without_improvement,
+            history=history,
+            epoch_complete=True,
+        )
         early_stop = epochs_without_improvement >= EARLY_STOPPING_PATIENCE
         if early_stop:
             accelerator.print(
@@ -760,6 +1028,13 @@ def train_depth_probe(
         epoch + 1,
         validation_loss,
         metrics,
+        scheduler=scheduler,
+        ema_loss=ema_loss,
+        best_validation_loss=best_validation_loss,
+        best_metrics=best_metrics,
+        epochs_without_improvement=epochs_without_improvement,
+        history=history,
+        epoch_complete=True,
     )
     load_depth_checkpoint(best_checkpoint_path, accelerator, probe)
     accelerator.print(
@@ -797,6 +1072,8 @@ def parse_args():
     parser.add_argument("--max-depth-steps", type=int)
     parser.add_argument("--max-validation-steps", type=int)
     parser.add_argument("--test", action="store_true")
+    parser.add_argument("--no-resume", dest="resume", action="store_false")
+    parser.set_defaults(resume=True)
     return parser.parse_args()
 
 
@@ -821,8 +1098,23 @@ def main():
         suffix += f"-loo-{args.head_ablation_number}"
     if args.test:
         suffix += "-test"
-    run_dir = Path(args.output_root) / suffix / datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    log_dir = Path("training_logs") / suffix
+    ablation_dir = Path(args.output_root) / suffix
+    existing_runs = sorted(path for path in ablation_dir.glob("*") if path.is_dir())
+    run_dir = None
+    if args.resume and existing_runs:
+        candidate = existing_runs[-1]
+        if run_is_compatible(candidate, args):
+            run_dir = candidate
+        else:
+            accelerator.print(
+                f"Latest run {candidate} is incompatible with the current dataset/model; "
+                "starting a new run"
+            )
+    is_resuming = run_dir is not None
+    if run_dir is None:
+        run_dir = ablation_dir / datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+    stage = get_run_stage(run_dir) if is_resuming else "upscaler"
+    log_dir = run_dir / "logs"
     upscaler_training_loss_path = log_dir / "upscaler_training_loss.txt"
     upscaler_validation_loss_path = log_dir / "upscaler_validation.txt"
     depth_training_loss_path = log_dir / "depth_training_loss.txt"
@@ -830,16 +1122,24 @@ def main():
     if accelerator.is_main_process:
         (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
-        for path in (
-            upscaler_training_loss_path,
-            upscaler_validation_loss_path,
-            depth_training_loss_path,
-            depth_validation_path,
-        ):
-            path.write_text("")
-        with open(run_dir / "config.json", "w") as file:
-            json.dump(vars(args), file, indent=2)
+        if not is_resuming:
+            for path in (
+                upscaler_training_loss_path,
+                upscaler_validation_loss_path,
+                depth_training_loss_path,
+                depth_validation_path,
+            ):
+                path.write_text("")
+            with open(run_dir / "config.json", "w") as file:
+                json.dump({**vars(args), "model_config": MODEL_CONFIG}, file, indent=2)
+            write_run_state(run_dir, stage)
     accelerator.wait_for_everyone()
+
+    if is_resuming:
+        accelerator.print(f"Resuming run {run_dir} at stage: {stage}")
+    if stage == "complete":
+        accelerator.print(f"Ablation already complete; skipping: {run_dir}")
+        return
 
     samples = list_hypersim_samples(args.dataset_root)
     train_samples, val_samples = split_hypersim_samples(samples)
@@ -847,15 +1147,23 @@ def main():
         f"Loaded {len(samples)} Hypersim samples from {args.dataset_root}: "
         f"{len(train_samples)} train, {len(val_samples)} validation"
     )
-    upscaler = train_upscaler(
-        args,
-        accelerator,
-        train_samples,
-        val_samples,
-        run_dir,
-        upscaler_training_loss_path,
-        upscaler_validation_loss_path,
-    )
+    if stage == "upscaler":
+        upscaler = train_upscaler(
+            args,
+            accelerator,
+            train_samples,
+            val_samples,
+            run_dir,
+            upscaler_training_loss_path,
+            upscaler_validation_loss_path,
+            resume_checkpoint=latest_stage_checkpoint(run_dir, "upscaler") if is_resuming else None,
+        )
+        if accelerator.is_main_process:
+            write_run_state(run_dir, "depth")
+        accelerator.wait_for_everyone()
+    else:
+        upscaler = prepare_upscaler_for_depth(args, accelerator, run_dir)
+
     metrics = train_depth_probe(
         args,
         accelerator,
@@ -865,8 +1173,14 @@ def main():
         run_dir,
         depth_training_loss_path,
         depth_validation_path,
+        resume_checkpoint=(
+            latest_stage_checkpoint(run_dir, "depth")
+            if is_resuming and stage == "depth"
+            else None
+        ),
     )
     if accelerator.is_main_process:
+        write_run_state(run_dir, "complete")
         print(f"Finished. Outputs: {run_dir}")
         print(json.dumps(metrics, indent=2))
 

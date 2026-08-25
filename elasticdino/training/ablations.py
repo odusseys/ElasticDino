@@ -50,7 +50,11 @@ class AblateDeformations(nn.Module):
         AblateDeformationsStage(layer_configs[res], n_features_in, n_image_features) for res in layer_configs
     ])
 
-    self.dino = DinoV2(dino_repo,config["dino_model"], )
+    self.dino = DinoV2(
+      dino_repo,
+      config["dino_model"],
+      use_registers=config.get("use_registers", True),
+    )
 
   def forward(self, images, return_all_scales=False, return_original_features=False, return_class_token=False):
     dino_images = resize_for_dino(images, self.config["start_size"])
