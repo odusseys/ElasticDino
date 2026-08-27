@@ -150,7 +150,7 @@ def split_hypersim_samples(samples, train_proportion=0.9):
     return shuffled_samples[:split_index], shuffled_samples[split_index:]
 
 
-def make_upscaler_and_heads(ablation, head_ablation_number):
+def make_upscaler_and_heads(ablation, head_ablation_number=None, head_ablation_count=None):
     if ablation == "deformations":
         return AblateDeformations(MODEL_CONFIG), HypersimTaskHeads(MODEL_CONFIG["n_features_in"])
     if ablation == "none":
@@ -158,6 +158,17 @@ def make_upscaler_and_heads(ablation, head_ablation_number):
             MODEL_CONFIG["n_features_in"]
         )
     if ablation == "heads":
+        if head_ablation_number is not None and head_ablation_count is not None:
+            raise ValueError("heads ablation accepts either a head number or a cumulative head count, not both")
+        if head_ablation_count is not None:
+            if not 1 <= head_ablation_count < len(HYPERSIM_TASKS):
+                raise ValueError(
+                    f"cumulative heads ablation requires a count in [1, {len(HYPERSIM_TASKS) - 1}]"
+                )
+            tasks = HYPERSIM_TASKS[head_ablation_count:]
+            return ElasticDino(MODEL_CONFIG, "facebookresearch/dinov2"), AblationTaskHeads(
+                MODEL_CONFIG["n_features_in"], tasks
+            )
         if head_ablation_number is None or not 0 <= head_ablation_number < len(HYPERSIM_TASKS):
             raise ValueError(f"heads ablation requires a head number in [0, {len(HYPERSIM_TASKS) - 1}]")
         tasks = HYPERSIM_TASKS[:head_ablation_number] + HYPERSIM_TASKS[head_ablation_number + 1 :]
@@ -278,12 +289,14 @@ def run_is_compatible(run_dir, args):
     expected = {
         "ablation": args.ablation,
         "head_ablation_number": args.head_ablation_number,
+        "head_ablation_count": args.head_ablation_count,
         "dataset_root": str(Path(args.dataset_root).resolve()),
         "test": args.test,
     }
     actual = {
         "ablation": config.get("ablation"),
         "head_ablation_number": config.get("head_ablation_number"),
+        "head_ablation_count": config.get("head_ablation_count"),
         "dataset_root": str(Path(config.get("dataset_root", "")).resolve()),
         "test": config.get("test", False),
     }
@@ -295,7 +308,11 @@ def prepare_upscaler_for_depth(args, accelerator, run_dir):
     best_checkpoint_path = run_dir / "best_upscaler.pt"
     if not best_checkpoint_path.is_file():
         raise RuntimeError(f"Cannot resume depth stage without {best_checkpoint_path}")
-    upscaler, _ = make_upscaler_and_heads(args.ablation, args.head_ablation_number)
+    upscaler, _ = make_upscaler_and_heads(
+        args.ablation,
+        args.head_ablation_number,
+        args.head_ablation_count,
+    )
     upscaler = accelerator.prepare(upscaler)
     checkpoint = load_upscaler_checkpoint(best_checkpoint_path, accelerator, upscaler)
     upscaler.eval()
@@ -395,7 +412,11 @@ def train_upscaler(
     validation_loss_path,
     resume_checkpoint=None,
 ):
-    upscaler, task_heads = make_upscaler_and_heads(args.ablation, args.head_ablation_number)
+    upscaler, task_heads = make_upscaler_and_heads(
+        args.ablation,
+        args.head_ablation_number,
+        args.head_ablation_count,
+    )
     optimizer = torch.optim.AdamW(
         [
             {"params": upscaler.parameters(), "lr": args.upscaler_lr},
@@ -1049,10 +1070,17 @@ def parse_args():
     parser.add_argument("--dataset-root", default=HYPERSIM_PATH)
     parser.add_argument("--output-root", default="elasticdino-runs/ablations-combined")
     parser.add_argument("--ablation", choices=("none", "heads", "deformations"), default=os.getenv("ABLATION", "none"))
-    parser.add_argument(
+    head_ablation = parser.add_mutually_exclusive_group()
+    head_ablation.add_argument(
         "--head-ablation-number",
         type=int,
         default=int(os.environ["HEAD_ABLATION_NUMBER"]) if "HEAD_ABLATION_NUMBER" in os.environ else None,
+    )
+    head_ablation.add_argument(
+        "--head-ablation-count",
+        type=int,
+        default=int(os.environ["HEAD_ABLATION_COUNT"]) if "HEAD_ABLATION_COUNT" in os.environ else None,
+        help="cumulatively remove this many heads from the start of HYPERSIM_TASKS",
     )
     parser.add_argument("--upscaler-epochs", type=int, default=20)
     parser.add_argument("--upscaler-batch-size", type=int, default=32)
@@ -1095,7 +1123,10 @@ def main():
     accelerator = Accelerator(mixed_precision="no")
     suffix = args.ablation
     if args.ablation == "heads":
-        suffix += f"-loo-{args.head_ablation_number}"
+        if args.head_ablation_count is not None:
+            suffix += f"-cumulative-{args.head_ablation_count}"
+        else:
+            suffix += f"-loo-{args.head_ablation_number}"
     if args.test:
         suffix += "-test"
     ablation_dir = Path(args.output_root) / suffix
