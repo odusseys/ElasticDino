@@ -32,7 +32,7 @@ from elasticdino.training.ablations import (
 HYPERSIM_PATH = "/home/ubuntu/datasets/hypersim/hypersim"
 DEPTH_ANYTHING_MODEL = "depth-anything/Depth-Anything-V2-Small-hf"
 TRAINING_LOSS_INTERVAL = 100
-VALIDATION_INTERVAL = 500
+DEPTH_VALIDATION_BATCH_SIZE = 32
 EARLY_STOPPING_PATIENCE = 2
 CROSS_RESOLUTION_LOSS = True
 
@@ -848,7 +848,12 @@ def train_depth_probe(
         shuffle=True,
         num_workers=args.num_workers,
     )
-    val_loader = make_loader(val_dataset, 1, shuffle=False, num_workers=args.num_workers)
+    val_loader = make_loader(
+        val_dataset,
+        DEPTH_VALIDATION_BATCH_SIZE,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
 
     probe = DepthProbe(MODEL_CONFIG["n_features_in"])
     optimizer = torch.optim.AdamW(
@@ -939,20 +944,6 @@ def train_depth_probe(
             if step % args.training_loss_interval == 0:
                 if accelerator.is_main_process:
                     append_record(training_loss_path, {"step": step, "ema_loss": ema_loss})
-            if step % args.validation_interval == 0:
-                validation_metrics, validation_loss = evaluate_depth(
-                    upscaler, probe, teacher, val_loader, accelerator, args
-                )
-                if accelerator.is_main_process:
-                    append_record(
-                        validation_path,
-                        {"step": step, "val_loss": validation_loss, **validation_metrics},
-                    )
-                    progress.write(
-                        f"depth step={step} val_loss={validation_loss:.6f} "
-                        f"metrics={json.dumps(validation_metrics)}"
-                    )
-                probe.train()
             if args.save_interval and step % args.save_interval == 0:
                 save_depth_checkpoint(
                     run_dir / "checkpoints" / f"depth-{step}.pt",
@@ -1002,6 +993,14 @@ def train_depth_probe(
                 epoch_complete=True,
             )
         if accelerator.is_main_process:
+            append_record(
+                validation_path,
+                {"epoch": epoch + 1, "step": step, "val_loss": validation_loss, **metrics},
+            )
+            progress.write(
+                f"depth epoch={epoch + 1} val_loss={validation_loss:.6f} "
+                f"metrics={json.dumps(metrics)}"
+            )
             record = {
                 "epoch": epoch + 1,
                 "train_loss": total_loss / processed_batches if processed_batches else ema_loss,
@@ -1084,7 +1083,7 @@ def parse_args():
     )
     parser.add_argument("--upscaler-epochs", type=int, default=20)
     parser.add_argument("--upscaler-batch-size", type=int, default=32)
-    parser.add_argument("--upscaler-lr", type=float, default=1e-4)
+    parser.add_argument("--upscaler-lr", type=float, default=5e-4)
     parser.add_argument("--depth-epochs", type=int, default=20)
     parser.add_argument("--depth-batch-size", type=int, default=32)
     parser.add_argument("--depth-lr", type=float, default=5e-4)
@@ -1095,7 +1094,6 @@ def parse_args():
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--save-interval", type=int, default=500)
     parser.add_argument("--training-loss-interval", type=int, default=TRAINING_LOSS_INTERVAL)
-    parser.add_argument("--validation-interval", type=int, default=VALIDATION_INTERVAL)
     parser.add_argument("--max-upscaler-steps", type=int)
     parser.add_argument("--max-depth-steps", type=int)
     parser.add_argument("--max-validation-steps", type=int)
@@ -1115,7 +1113,6 @@ def main():
         args.max_validation_steps = 1
         args.save_interval = 1
         args.training_loss_interval = 1
-        args.validation_interval = 1
     if not torch.cuda.is_available():
         raise RuntimeError("This training script requires CUDA")
 

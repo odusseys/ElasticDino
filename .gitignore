@@ -7,3 +7,4 @@
 /slurm-*.err
 /elasticdino-runs/ablations-combined/*-test/
 /elasticdino-runs/
+*.log
