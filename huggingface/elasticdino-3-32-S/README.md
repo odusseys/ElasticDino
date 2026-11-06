@@ -4,17 +4,21 @@ library_name: pytorch
 
 # ElasticDino 3 32-S
 
-This model was trained with DINOv3-S features and produces a 256 x 256 dense
-feature map. Its current loader configuration points to DINOv2; DINOv3
-backbone support is pending, so do not use the example below for inference yet.
+This model uses DINOv3 ViT-S/16-plus features and produces a 256 x 256 dense
+feature map.
 The weights were duplicated from `articuno7/elasticdino-3-32-S`.
+
+The ElasticDino repository is public, but the upstream
+[DINOv3 backbone](https://huggingface.co/facebook/dinov3-vits16plus-pretrain-lvd1689m)
+is gated. Accept Meta's access terms and run `hf auth login`, or pass an
+authorized `token` to `from_pretrained`.
 
 ## Usage
 
 ```bash
 git clone https://github.com/odusseys/ElasticDino.git
 cd ElasticDino
-pip install torch torchvision huggingface_hub pillow
+pip install torch torchvision huggingface_hub pillow 'transformers>=4.57,<5'
 ```
 
 ```python

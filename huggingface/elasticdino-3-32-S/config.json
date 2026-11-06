@@ -1,9 +1,11 @@
 {
   "checkpoint_file": "elasticdino-3-32-S.pth",
-  "dino_repo": "facebookresearch/dinov2",
+  "dino_family": "dinov3",
+  "dino_repo": "facebook/dinov3-vits16plus-pretrain-lvd1689m",
+  "dino_revision": "c93d816fc9e567563bc068f01475bec89cc634a6",
   "dino_model": "s",
   "n_features_in": 384,
-  "use_registers": false,
+  "use_registers": true,
   "start_size": 32,
   "target_size": 256,
   "layers": {

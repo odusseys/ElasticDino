@@ -5,10 +5,14 @@
 Create and activate a Python virtual environment, then install the dependencies:
 
 ```bash
-pip install torch torchvision huggingface_hub pillow
+pip install torch torchvision huggingface_hub pillow 'transformers>=4.57,<5'
 ```
 
-The DINOv2 backbone is downloaded through PyTorch Hub on first use.
+The DINOv2 backbone is downloaded through PyTorch Hub on first use. The
+DINOv3 model also requires access to Meta's gated
+[DINOv3 ViT-S/16-plus weights](https://huggingface.co/facebook/dinov3-vits16plus-pretrain-lvd1689m).
+Accept the upstream access terms and authenticate with `hf auth login` before
+loading that model, or pass a Hugging Face token to `from_pretrained`.
 
 ## Usage
 
@@ -17,16 +21,13 @@ The DINOv2 backbone is downloaded through PyTorch Hub on first use.
 | [elasticdino-3-32-S](https://huggingface.co/odusseys/elasticdino-3-32-S) | DINOv3 | Small |
 | [elasticdino-32-S](https://huggingface.co/odusseys/elasticdino-32-S) | DINOv2 | Small |
 
-The DINOv3 model's loader configuration currently points to DINOv2; DINOv3
-backbone support is pending. Use `odusseys/elasticdino-32-S` for inference.
-
 ```python
 import torch
 from PIL import Image
 from elasticdino.model.elasticdino import ElasticDino
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = ElasticDino.from_pretrained("odusseys/elasticdino-32-S").to(device).eval()
+model = ElasticDino.from_pretrained("odusseys/elasticdino-3-32-S").to(device).eval()
 image = Image.open("image.jpg").convert("RGB")
 
 with torch.inference_mode():

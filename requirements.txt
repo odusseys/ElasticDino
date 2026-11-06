@@ -4,6 +4,8 @@ torchmetrics
 timm
 pycocotools
 bitsandbytes
-transformers
+transformers>=4.57,<5
+huggingface_hub
+pillow
 torch
 torchvision

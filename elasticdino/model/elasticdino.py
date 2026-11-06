@@ -170,7 +170,7 @@ def prepare_image_input(images, device):
 
 
 class ElasticDino(nn.Module):
-  def __init__(self, config, dino_repo):
+  def __init__(self, config, dino_repo, *, token=None):
     super().__init__()
     self.config = config
 
@@ -187,18 +187,25 @@ class ElasticDino(nn.Module):
         for res in sorted(layer_configs, key=int)
     ])
 
-    self.dino = DinoV2(
-      dino_repo,
-      config["dino_model"],
-      use_registers=config.get("use_registers", True),
-    )
+    family = config.get("dino_family", "dinov2")
+    if family == "dinov2":
+      self.dino = DinoV2(dino_repo, config["dino_model"], use_registers=config.get("use_registers", True))
+      self.patch_size = 14
+    elif family == "dinov3":
+      from elasticdino.model.dino_v3 import DinoV3
+      self.dino = DinoV3(dino_repo, token=token, revision=config.get("dino_revision"))
+      self.patch_size = self.dino.patch_size
+      if self.dino.feature_size != n_features_in:
+        raise ValueError("DINOv3 backbone feature size does not match the ElasticDino configuration")
+    else:
+      raise ValueError(f"Unsupported DINO backbone family: {family}")
 
   def forward(self, images, return_all_scales=False, return_original_features=False, return_displacements=False, n_hidden_layers=None, return_class_token=False):
     images = prepare_image_input(images, next(self.stages.parameters()).device)
     with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=images.is_cuda):
       if n_hidden_layers is None:
         additional_inputs = []
-        dino_images = resize_for_dino(images, self.config["start_size"])
+        dino_images = resize_for_dino(images, self.config["start_size"], self.patch_size)
         if return_class_token:
           features_in, class_token = self.dino.get_features_and_class_token_for_tensor(dino_images)
         else:
@@ -206,7 +213,7 @@ class ElasticDino(nn.Module):
       else:
         if return_class_token:
           raise ValueError("return_class_token is not supported with n_hidden_layers")
-        additional_inputs = self.dino.get_intermediate_features_for_tensor(resize_for_dino(images, self.config["start_size"]), n_hidden_layers)
+        additional_inputs = self.dino.get_intermediate_features_for_tensor(resize_for_dino(images, self.config["start_size"], self.patch_size), n_hidden_layers)
         features_in = additional_inputs.pop(-1)
       features = features_in
       images = nn.functional.interpolate(images, self.config["target_size"], mode="bilinear", antialias=True)
@@ -272,6 +279,6 @@ class ElasticDino(nn.Module):
     )
     checkpoint = torch.load(checkpoint_path, weights_only=True, map_location="cpu")
     checkpoint = {key.replace("_orig_mod.", ""): value for key, value in checkpoint.items()}
-    model = cls(config, config["dino_repo"])
+    model = cls(config, config["dino_repo"], token=token)
     model.stages.load_state_dict({key.removeprefix("stages."): value for key, value in checkpoint.items()})
     return model

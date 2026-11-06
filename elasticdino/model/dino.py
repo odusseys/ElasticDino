@@ -18,9 +18,8 @@ FEATURE_SIZES = {
     'g': 1536
 }
 
-def resize_for_dino(images, starting_size):
-    factor = starting_size // MINIMAL_GRID_SIZE
-    images = torch.nn.functional.interpolate(images, factor * MINIMAL_IMAGE_SIZE, mode="bilinear", align_corners=False, antialias=True)
+def resize_for_dino(images, starting_size, patch_size=14):
+    images = torch.nn.functional.interpolate(images, starting_size * patch_size, mode="bilinear", align_corners=False, antialias=True)
     return images  
 
 import torch.nn as nn
