@@ -4,7 +4,9 @@ library_name: pytorch
 
 # ElasticDino 3 32-S
 
-This model uses DINOv2-S features and produces a 256 x 256 dense feature map.
+This model was trained with DINOv3-S features and produces a 256 x 256 dense
+feature map. Its current loader configuration points to DINOv2; DINOv3
+backbone support is pending, so do not use the example below for inference yet.
 The weights were duplicated from `articuno7/elasticdino-3-32-S`.
 
 ## Usage

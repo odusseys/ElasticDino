@@ -29,7 +29,6 @@ from elasticdino.training.ablations import (
 )
 
 
-HYPERSIM_PATH = "/home/ubuntu/datasets/hypersim/hypersim"
 DEPTH_ANYTHING_MODEL = "depth-anything/Depth-Anything-V2-Small-hf"
 TRAINING_LOSS_INTERVAL = 100
 DEPTH_VALIDATION_BATCH_SIZE = 32
@@ -1066,7 +1065,7 @@ def train_depth_probe(
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset-root", default=HYPERSIM_PATH)
+    parser.add_argument("--dataset-root", required=True, help="Path to the Hypersim dataset")
     parser.add_argument("--output-root", default="elasticdino-runs/ablations-combined")
     parser.add_argument("--ablation", choices=("none", "heads", "deformations"), default=os.getenv("ABLATION", "none"))
     head_ablation = parser.add_mutually_exclusive_group()
