@@ -12,10 +12,10 @@ The DINOv2 backbone is downloaded through PyTorch Hub on first use.
 
 ## Usage
 
-Choose either `odusseys/elasticdino-3-32-S` or `odusseys/elasticdino-32-S`.
-Each repository contains its own architecture configuration and weights.
-Private repositories require Hugging Face authentication (for example,
-`hf auth login`) or a `token` passed to `from_pretrained`.
+| Repository | Base model | Model size |
+| --- | --- | --- |
+| [elasticdino-3-32-S](https://huggingface.co/odusseys/elasticdino-3-32-S) | DINOv2 | Small |
+| [elasticdino-32-S](https://huggingface.co/odusseys/elasticdino-32-S) | DINOv2 | Small |
 
 ```python
 import torch

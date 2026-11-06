@@ -30,5 +30,4 @@ print(features.shape)  # (1, 384, 256, 256)
 
 An RGB tensor of shape `(3, H, W)` or `(B, 3, H, W)` is also accepted;
 use `uint8` in `[0, 255]` or floating point in `[0, 1]`. Non-square inputs
-are center cropped with a warning. Private models require `hf auth login`
-or a `token` argument to `from_pretrained`.
+are center cropped with a warning.
