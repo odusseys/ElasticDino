@@ -1,0 +1,15 @@
+{
+  "checkpoint_file": "elasticdino-new-32-S.pth",
+  "dino_repo": "facebookresearch/dinov2",
+  "dino_model": "s",
+  "n_features_in": 384,
+  "use_registers": false,
+  "start_size": 32,
+  "target_size": 256,
+  "layers": {
+    "32": {"hidden_features": 512, "n_blocks": 3, "layers_per_block": 6},
+    "64": {"hidden_features": 512, "n_blocks": 3, "layers_per_block": 6},
+    "128": {"hidden_features": 256, "n_blocks": 2, "layers_per_block": 6},
+    "256": {"hidden_features": 128, "n_blocks": 1, "layers_per_block": 4}
+  }
+}

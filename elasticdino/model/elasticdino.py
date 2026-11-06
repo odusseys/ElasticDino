@@ -4,7 +4,11 @@ import math
 from elasticdino.model.dino import DinoV2, resize_for_dino
 from elasticdino.model.layers import ProjectionLayer, ResidualBlock, Activation, FCLayer
 import logging
+import json
+import warnings
 from huggingface_hub import hf_hub_download
+from PIL import Image
+from torchvision.transforms.functional import pil_to_tensor
 
 
 # logger = logging.getLogger("ElasticDino")
@@ -139,88 +143,30 @@ class ElasticDinoStage(nn.Module):
     return results
 
 
-CONFIGS = {
-  # "elasticdino-64-L":  dict(
-  #       dino_model="l",
-  #       n_features_in=1024,
-  #       layers={
-  #           64: dict(hidden_features=256, n_blocks=4, layers_per_block=8),
-  #           128: dict(hidden_features=256, n_blocks=3, layers_per_block=8),
-  #       },
-  #       start_size=64,
-  #       target_size=128,
-  #   ),
-    "elasticdino-32-L": dict(
-        dino_model="l",
-        n_features_in=1024,
-        layers={
-            32: dict(hidden_features=512, n_blocks=5, layers_per_block=8),
-            64: dict(hidden_features=256, n_blocks=4, layers_per_block=8),
-            128: dict(hidden_features=256, n_blocks=3, layers_per_block=8),
-        },
-        start_size=32,
-        target_size=128,
-    ),
-    "elasticdino-64-L":  dict(
-        dino_model="l",
-        n_features_in=1024,
-        layers={
-            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
-            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
-            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
-        },
-        start_size=64,
-        target_size=256,
-    ),
-    "elasticdino-64-S":  dict(
-        dino_model="s",
-        n_features_in=384,
-        layers={
-            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
-            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
-            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
-        },
-        start_size=64,
-        target_size=256,
-    ),
-    "elasticdino-64-B":  dict(
-        dino_model="b",
-        n_features_in=768,
-        layers={
-            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
-            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
-            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
-        },
-        start_size=64,
-        target_size=256,
-    ),
-    "elasticdino-64-G":  dict(
-        dino_model="g",
-        n_features_in=1536,
-        layers={
-            64: dict(hidden_features=512, n_blocks=3, layers_per_block=6),
-            128: dict(hidden_features=256, n_blocks=2, layers_per_block=6),
-            256: dict(hidden_features=128, n_blocks=1, layers_per_block=4),
-        },
-        start_size=64,
-        target_size=256,
-    ),
-}
+def prepare_image_input(images, device):
+    """Convert an RGB PIL image or CHW/BCHW tensor into a square float batch."""
+    if isinstance(images, Image.Image):
+        images = pil_to_tensor(images.convert("RGB"))
+    if not isinstance(images, torch.Tensor):
+        raise TypeError("Expected a PIL image or a CHW/BCHW tensor")
+    if images.ndim == 3:
+        images = images.unsqueeze(0)
+    if images.ndim != 4 or images.shape[1] != 3:
+        raise ValueError("Expected an RGB tensor with shape (3, H, W) or (B, 3, H, W)")
+    if images.dtype == torch.uint8:
+        images = images.to(device=device, dtype=torch.float32) / 255.0
+    elif images.is_floating_point():
+        images = images.to(device=device, dtype=torch.float32)
+    else:
+        raise TypeError("Tensor images must be uint8 or floating point")
 
-def repair_checkpoint(path):
-    ckpt = torch.load(path, weights_only=True, map_location=torch.device("cpu"))
-    in_state_dict = ckpt
-    pairings = [
-        (src_key, "".join(src_key.split("_orig_mod.")))
-        for src_key in in_state_dict.keys()
-    ]
-    if all(src_key == dest_key for src_key, dest_key in pairings):
-        return  # Do not write checkpoint if no need to repair!
-    out_state_dict = {}
-    for src_key, dest_key in pairings:
-        out_state_dict[dest_key] = in_state_dict[src_key]
-    ckpt = out_state_dict
-    torch.save(ckpt, path)
+    height, width = images.shape[-2:]
+    if height != width:
+        warnings.warn("Input image is not square and will be center cropped.", UserWarning, stacklevel=2)
+        size = min(height, width)
+        top, left = (height - size) // 2, (width - size) // 2
+        images = images[..., top:top + size, left:left + size]
+    return images
 
 
 class ElasticDino(nn.Module):
@@ -237,7 +183,8 @@ class ElasticDino(nn.Module):
     assert n_upscales == len(layer_configs), "Incompatible resolutions and feature config"
 
     self.stages = nn.ModuleList([
-        ElasticDinoStage(layer_configs[res], n_features_in, n_image_features) for res in layer_configs
+        ElasticDinoStage(layer_configs[res], n_features_in, n_image_features)
+        for res in sorted(layer_configs, key=int)
     ])
 
     self.dino = DinoV2(
@@ -247,7 +194,8 @@ class ElasticDino(nn.Module):
     )
 
   def forward(self, images, return_all_scales=False, return_original_features=False, return_displacements=False, n_hidden_layers=None, return_class_token=False):
-    with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
+    images = prepare_image_input(images, next(self.stages.parameters()).device)
+    with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=images.is_cuda):
       if n_hidden_layers is None:
         additional_inputs = []
         dino_images = resize_for_dino(images, self.config["start_size"])
@@ -274,10 +222,9 @@ class ElasticDino(nn.Module):
           results.append(features)
         additional_inputs = stage_outputs["additional_inputs"]
 
-        del stage_outputs
-
         if return_displacements:
-          all_displacements.append(features["displacements"])
+          all_displacements.append(stage_outputs["displacements"])
+        del stage_outputs
         if i < n - 1:
           current_size *= 2
           features = torch.nn.functional.interpolate(features, current_size, mode="nearest")
@@ -314,17 +261,17 @@ class ElasticDino(nn.Module):
     self.stages.train(value)
     return self
   
-  def from_pretrained(model_name, checkpoint_path=None, dino_repo='facebookresearch/dinov2'):
-    config = CONFIGS[model_name]
-    if checkpoint_path is None:
-      # checkpoint_path = hf_hub_download(repo_id=f"ulyssemizrahi/{model_name}", filename=f"{model_name}.pth")
-      checkpoint_path = hf_hub_download(repo_id=f"articuno7/{model_name}", filename=f"{model_name}.pth")
-    repair_checkpoint(checkpoint_path) # Doc ???? Why would need to repair?
-    checkpoint = torch.load(checkpoint_path, weights_only=True)
-    model = ElasticDino(config, dino_repo)
-    # don't load parameters in the pretrained dino
-    tmp_dino = model.dino
-    model.dino = None
-    model.load_state_dict(checkpoint)
-    model.dino = tmp_dino
+  @classmethod
+  def from_pretrained(cls, repo_id, *, revision=None, token=None):
+    """Load architecture and weights from a Hugging Face model repository."""
+    config_path = hf_hub_download(repo_id=repo_id, filename="config.json", revision=revision, token=token)
+    with open(config_path, encoding="utf-8") as config_file:
+      config = json.load(config_file)
+    checkpoint_path = hf_hub_download(
+      repo_id=repo_id, filename=config["checkpoint_file"], revision=revision, token=token
+    )
+    checkpoint = torch.load(checkpoint_path, weights_only=True, map_location="cpu")
+    checkpoint = {key.replace("_orig_mod.", ""): value for key, value in checkpoint.items()}
+    model = cls(config, config["dino_repo"])
+    model.stages.load_state_dict({key.removeprefix("stages."): value for key, value in checkpoint.items()})
     return model

@@ -2,18 +2,37 @@
 
 ## Install
 
-We recommend you create a virtual environment first: `python -m venv my-venv-name` and `source  my-venv-name/bin/activate`
+Create and activate a Python virtual environment, then install the dependencies:
 
+```bash
+pip install torch torchvision huggingface_hub pillow
 ```
-pip install torch torchvision kornia
-```
+
+The DINOv2 backbone is downloaded through PyTorch Hub on first use.
 
 ## Usage
 
-```
+Choose either `odusseys/elasticdino-3-32-S` or `odusseys/elasticdino-32-S`.
+Each repository contains its own architecture configuration and weights.
+Private repositories require Hugging Face authentication (for example,
+`hf auth login`) or a `token` passed to `from_pretrained`.
 
+```python
+import torch
+from PIL import Image
 from elasticdino.model.elasticdino import ElasticDino
 
-model = ElasticDino.from_pretrained("path/to/checkpoint")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = ElasticDino.from_pretrained("odusseys/elasticdino-3-32-S").to(device).eval()
+image = Image.open("image.jpg").convert("RGB")
 
+with torch.inference_mode():
+    features = model(image)
+
+print(features.shape)  # (1, 384, 256, 256)
 ```
+
+Inputs can also be RGB PyTorch tensors of shape `(3, H, W)` or
+`(B, 3, H, W)`: use `uint8` values in `[0, 255]` or floating-point values
+in `[0, 1]`. Inputs are moved to the model's device. Non-square images are
+center cropped with a warning. The output always retains a batch dimension.
