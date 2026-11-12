@@ -1,0 +1,11 @@
+datasets
+kornia
+torchmetrics
+timm
+pycocotools
+bitsandbytes
+transformers>=4.57,<5
+huggingface_hub
+pillow
+torch
+torchvision

@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="description" content="ElasticDino: Dense Semantic Features using Elastic Deformations">
+  <meta property="og:title" content="ElasticDino: Dense Semantic Features using Elastic Deformations">
+  <meta property="og:description" content="A lightweight deformation-based adapter for producing dense, pixel-aligned DINO feature maps.">
+  <meta property="og:url" content="https://odusseys.github.io/ElasticDino/">
+  <meta property="og:image" content="static/images/paper-teaser-full.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:title" content="ElasticDino">
+  <meta name="twitter:description" content="Dense semantic features from DINO backbones using image-guided elastic deformations.">
+  <meta name="twitter:image" content="static/images/paper-teaser-full.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="keywords" content="ElasticDino, DINOv2, dense prediction, feature upsampling, semantic segmentation, depth estimation, vision transformers">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>ElasticDino: Dense Semantic Features using Elastic Deformations</title>
+  <link rel="icon" type="image/x-icon" href="static/images/favicon.ico">
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+  <link rel="stylesheet" href="static/css/results.css">
+  <link rel="stylesheet" href="static/css/carousel.css">
+
+  <script defer src="static/js/fontawesome.all.min.js"></script>
+  <script defer src="static/js/index.js?v=slideshow-2027"></script>
+</head>
+<body>
+  <main>
+    <section class="hero publication-hero">
+      <div class="hero-body">
+        <div class="container is-max-desktop has-text-centered">
+          <img class="publication-logo" src="static/images/elasticdino-mascot.png" alt="ElasticDino mascot">
+          <h1 class="title publication-title">ElasticDino</h1>
+          <p class="publication-subtitle">Dense Semantic Features using Elastic Deformations</p>
+          <p class="publication-venue">WACV 2027</p>
+
+          <div class="publication-authors">
+            <span class="author-block">Ulysse Mizrahi<sup>*</sup></span>
+            <span class="author-block">Sean Zaretzky<sup>*</sup></span>
+            <span class="author-block">Dov Danon</span>
+            <span class="author-block">Amit H. Bermano</span>
+          </div>
+          <div class="publication-affiliation">Tel Aviv University</div>
+          <div class="publication-equal"><sup>*</sup>Equal contribution</div>
+
+          <div class="publication-links">
+            <span class="button publication-button is-disabled" aria-disabled="true" title="Coming soon">
+              <span class="icon"><i class="ai ai-arxiv" aria-hidden="true"></i></span><span>arXiv</span>
+            </span>
+            <a href="static/pdfs/ElasticDino-supplementary.pdf" target="_blank" rel="noopener noreferrer" class="button publication-button publication-button-light">
+              <span class="icon"><i class="fas fa-file-alt" aria-hidden="true"></i></span><span>Supp</span>
+            </a>
+            <a href="https://github.com/odusseys/ElasticDino" target="_blank" rel="noopener noreferrer" class="button publication-button">
+              <span class="icon"><i class="fab fa-github" aria-hidden="true"></i></span><span>Code</span>
+            </a>
+          </div>
+
+          <div class="publication-tldr">
+            <h2 class="title is-3">TL;DR</h2>
+            <p class="publication-tldr-part">
+              While vision transformers such as the "Dino" family are being used in various downstream tasks, they are limited in their output resolution due to the quadratic complexity of self-attention.
+            </p>
+            <p class="publication-tldr-part">
+              <strong>ElasticDino</strong> serves as a lightweight adapter to these models upscaling the output resolution through spatial deformations, using the original full resolution image for guidance. Through the upscaling process it also fixes various artifacts from the base models and creates high-resolution feature maps with sharp semantics beneficial for downstream tasks.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section teaser-section">
+      <div class="container is-max-widescreen">
+        <figure class="paper-figure teaser-main">
+          <img src="static/images/paper-teaser-full.png" alt="ElasticDino teaser showing DINOv2 features, ElasticDino features, and downstream dense tasks">
+        </figure>
+        <div class="teaser-copy">
+          <h2 class="title is-3">Abstract</h2>
+          <div class="abstract-body">
+            <p>
+              Vision transformers (ViTs) serve as the backbone for countless vision tasks, including dense prediction tasks such as segmentation and depth estimation. However, the quadratic complexity of self-attention limits semantic feature resolution and induces spatial artifacts. Consequently, dense prediction requires significant task-specific, computational and data collection efforts.
+            </p>
+            <p>
+              In this work, we introduce <strong>ElasticDino</strong>, an adapter for these backbones, which produces high-resolution feature maps that preserve the fine details of the input image. We observe, as a key insight, the consistency of artifacts across channels, which can be simultaneously resolved and matched to the input image structure. Using a lightweight, fully convolutional architecture that predicts only spatial deformations, <strong>ElasticDino</strong> produces pixel-aligned, high-resolution feature maps with artifacts greatly reduced. We specifically leverage deformations for their ability to efficiently apply consistent corrections across channels and strictly preserve sharp semantics, thereby, avoiding the smoothness biases inherent to alternative approaches.
+            </p>
+            <p>
+              Due to the absence of ground truth, we employ pixel-level linear heads to predict a set of downstream dense tasks, guiding the deformation process without leaking task specific semantics into the model.
+            </p>
+            <p>
+              <strong>ElasticDino</strong> enables efficient, high-performance training for dense tasks. We demonstrate superior performance over current methods and obtain state-of-the art results on semantic segmentation over a range of popular benchmarks. We argue that <strong>ElasticDino</strong> is recommended for many of the dense tasks currently employing pretrained attention-based backbones.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container is-max-desktop">
+        <div class="content-block">
+          <p class="section-kicker">Motivation</p>
+          <h2 class="title is-3">DINO features are low resolution and prone to artifacts</h2>
+          <p>
+            Standard ViT backbones operate on image patches, often yielding 32x32 or 64x64 feature grids for images that downstream models need to reason about at full resolution. This introduces positional noise, feature bleeding across boundaries, and extra burden on task-specific decoders.
+          </p>
+        </div>
+
+        <div class="figure-grid artifact-figure-grid">
+          <figure class="paper-figure">
+            <img src="static/images/paper-artifacts.png" alt="ViT feature artifacts across feature channels">
+            <figcaption>Patch-level features show positional artifacts and thickened boundaries.</figcaption>
+          </figure>
+          <figure class="paper-figure">
+            <img src="static/images/paper-channel-consistency.png" alt="Cross-channel consistency of ViT artifacts">
+            <figcaption>The artifacts are spatially consistent across channels, so one deformation field can correct all channels together.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section method-section">
+      <div class="container is-max-desktop">
+        <div class="content-block">
+          <p class="section-kicker">Method</p>
+          <h2 class="title is-3">Task-guided Elastic Deformations</h2>
+          <p>
+            ElasticDino alternates bilinear upsampling with lightweight Feature Deformation layers. Each layer reads the current semantic feature map and the image at the same resolution, predicts a 2D deformation field with depthwise-separable convolutional blocks, and warps the features instead of directly rewriting their values.
+          </p>
+        </div>
+
+        <figure class="paper-figure wide-figure">
+          <img src="static/images/paper-method-overview.png" alt="ElasticDino method overview">
+          <figcaption>Method overview. The input image is passed to the backbone for the low resolution, artifact-full features. These are successively passed to a sequence feature-fixing layers and then bilinearly upsampled by a factor 2. Feature Deformation layers project and concatenate both the image and the semantic features, which are fed to a series of depthwise residual blocks, that end up generating a deformation field that warps the feature map. Task heads induce the sole losses of the system. They are simple MLPs that operate on the individual pixel level. Each head is compared to the ground truth using a task-specific loss.</figcaption>
+        </figure>
+
+        <div class="insight-grid">
+          <article class="insight-card">
+            <div class="insight-heading">
+              <span class="insight-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 4h16M4 12h16M4 20h16M4 4v16M12 4v16M20 4v16" fill="none" stroke="currentColor" stroke-width="1.15"/><g fill="currentColor"><circle cx="4" cy="4" r="1.55"/><circle cx="12" cy="4" r="1.55"/><circle cx="20" cy="4" r="1.55"/><circle cx="4" cy="12" r="1.55"/><circle cx="12" cy="12" r="1.55"/><circle cx="20" cy="12" r="1.55"/><circle cx="4" cy="20" r="1.55"/><circle cx="12" cy="20" r="1.55"/><circle cx="20" cy="20" r="1.55"/></g></svg></span>
+              <span class="insight-title">Shared Deformations</span>
+            </div>
+            <div class="insight-body">
+              <p>Each Feature Deformation layer predicts a 2D warp field from the image and current feature map. The same spatial warp is applied to all channels, matching the channel-consistent structure of ViT artifacts while keeping computation lightweight.</p>
+            </div>
+          </article>
+          <article class="insight-card">
+            <div class="insight-heading">
+              <span class="insight-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-2.8 7.8-7 10-4.2-2.2-7-5.5-7-10V6l7-3z"/><path d="M8.5 12l2.3 2.3 4.7-5"/></svg></span>
+              <span class="insight-title">Semantic Preservation</span>
+            </div>
+            <div class="insight-body">
+              <p>The network warps existing features rather than directly rewriting feature values. Sampling from the original feature map preserves backbone semantics, discourages hallucinated task labels, and sharpens boundaries without smoothing away object identity.</p>
+            </div>
+          </article>
+          <article class="insight-card pixel-heads-card">
+            <div class="insight-heading">
+              <span class="insight-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><g fill="currentColor" transform="rotate(45 12 12)"><circle cx="6.5" cy="6.5" r="1.45"/><circle cx="12" cy="6.5" r="1.45"/><circle cx="17.5" cy="6.5" r="1.45"/><circle cx="6.5" cy="12" r="1.45"/><circle cx="12" cy="12" r="1.45"/><circle cx="17.5" cy="12" r="1.45"/><circle cx="6.5" cy="17.5" r="1.45"/><circle cx="12" cy="17.5" r="1.45"/><circle cx="17.5" cy="17.5" r="1.45"/></g></svg></span>
+              <span class="insight-title">Pixel-Level Heads</span>
+            </div>
+            <div class="insight-body">
+              <p>ElasticDino trains without ground-truth high-resolution DINO features. Instead, simple 1x1 task heads supervise every pixel for RGB, depth, semantic segmentation, normals, shading, albedo, residuals, and intrinsic decomposition.</p>
+              <p>Because the heads operate independently at each pixel, they cannot hide spatial mistakes with decoder context. The deformation layers must therefore align the frozen semantic features to image structure before the heads can solve the dense tasks.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section results-section">
+      <div class="container is-max-widescreen">
+        <div class="content-block">
+          <p class="section-kicker">Results</p>
+          <h2 class="title is-3">Qualitative Results</h2>
+        </div>
+
+        <div class="carousel-group">
+          <h3 class="carousel-group-title">Feature Maps</h3>
+          <div class="result-carousel" data-carousel aria-label="Feature Maps carousel">
+            <button class="carousel-nav carousel-nav-prev" type="button" data-carousel-prev aria-label="Previous feature PCA result">
+              <i class="fas fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <div class="carousel-viewport">
+              <figure class="carousel-slide is-active">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_1_tl.png" data-modal-caption="Feature Maps">
+                  <img src="static/figures/wacv_supp_fig_pca_1_tl.png" alt="Feature Maps: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_1_tr.png" data-modal-caption="Feature Maps" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_pca_1_tr.png" alt="Feature Maps: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_1_bl.png" data-modal-caption="Feature Maps" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_pca_1_bl.png" alt="Feature Maps: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_1_br.png" data-modal-caption="Feature Maps" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_pca_1_br.png" alt="Feature Maps: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_2_tl.png" data-modal-caption="Feature Maps" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_pca_2_tl.png" alt="Second feature PCA figure: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_2_tr.png" data-modal-caption="Feature Maps" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_pca_2_tr.png" alt="Second feature PCA figure: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_2_bl.png" data-modal-caption="Feature Maps" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_pca_2_bl.png" alt="Second feature PCA figure: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_pca_2_br.png" data-modal-caption="Feature Maps" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_pca_2_br.png" alt="Second feature PCA figure: Image, LR Features, JAFAR, AnyUp, LoftUp, UPLift, and ED(ours)">
+                </button>
+              </figure>
+            </div>
+            <button class="carousel-nav carousel-nav-next" type="button" data-carousel-next aria-label="Next feature PCA result">
+              <i class="fas fa-chevron-right" aria-hidden="true"></i>
+            </button>
+            <p class="carousel-status sr-only" aria-live="polite">Slide 1 of 8</p>
+          </div>
+          <p class="carousel-note">Upscaled feature map comparisons through visualizations of the first three PCA components of the resulting features.</p>
+        </div>
+
+        <div class="carousel-group">
+          <h3 class="carousel-group-title">Downstream Tasks - Segmentation</h3>
+          <div class="result-carousel" data-carousel aria-label="segmentation carousel">
+            <button class="carousel-nav carousel-nav-prev" type="button" data-carousel-prev aria-label="Previous segmentation carousel">
+              <i class="fas fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <div class="carousel-viewport">
+              <figure data-description="Comparison of segmentation over upscaled features, COCO dataset" class="carousel-slide is-active">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_1_tl.png" data-modal-caption="Semantic segmentation">
+                  <img src="static/figures/wacv_supp_fig_seg_1_tl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, COCO dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_1_tr.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_1_tr.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, COCO dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_1_bl.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_1_bl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, COCO dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_1_br.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_1_br.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, ADE20K dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_2_tl.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_2_tl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, ADE20K dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_2_tr.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_2_tr.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, ADE20K dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_2_bl.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_2_bl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, ADE20K dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_2_br.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_2_br.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, VOC dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_3_tl.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_3_tl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, VOC dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_3_tr.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_3_tr.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, VOC dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_3_bl.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_3_bl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, VOC dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_3_br.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_3_br.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, CityScapes dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_4_tl.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_4_tl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, CityScapes dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_4_tr.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_4_tr.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, CityScapes dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_4_bl.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_4_bl.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure data-description="Comparison of segmentation over upscaled features, CityScapes dataset" class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_seg_4_br.png" data-modal-caption="Semantic segmentation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_seg_4_br.png" alt="Semantic segmentation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+            </div>
+            <button class="carousel-nav carousel-nav-next" type="button" data-carousel-next aria-label="Next segmentation carousel">
+              <i class="fas fa-chevron-right" aria-hidden="true"></i>
+            </button>
+            <p class="carousel-status sr-only" aria-live="polite">Slide 1 of 16</p>
+          </div>
+          <p class="carousel-note" data-live-description>Comparison of segmentation over upscaled features, COCO dataset</p>
+        </div>
+
+        <div class="carousel-group">
+          <h3 class="carousel-group-title">Downstream Tasks - Depth Estimation</h3>
+          <div class="result-carousel" data-carousel aria-label="depth estimation carousel">
+            <button class="carousel-nav carousel-nav-prev" type="button" data-carousel-prev aria-label="Previous depth estimation carousel">
+              <i class="fas fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <div class="carousel-viewport">
+              <figure class="carousel-slide is-active">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_depth_1_tl.png" data-modal-caption="Depth estimation">
+                  <img src="static/figures/wacv_supp_fig_depth_1_tl.png" alt="Depth estimation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_depth_1_tr.png" data-modal-caption="Depth estimation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_depth_1_tr.png" alt="Depth estimation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_depth_1_bl.png" data-modal-caption="Depth estimation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_depth_1_bl.png" alt="Depth estimation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <button class="carousel-image-button" type="button" data-modal-image="static/figures/wacv_supp_fig_depth_1_br.png" data-modal-caption="Depth estimation" tabindex="-1">
+                  <img src="static/figures/wacv_supp_fig_depth_1_br.png" alt="Depth estimation comparison across Image, JAFAR, AnyUp, LoftUp, UPLift, ED(ours), and ground truth">
+                </button>
+              </figure>
+            </div>
+            <button class="carousel-nav carousel-nav-next" type="button" data-carousel-next aria-label="Next depth estimation carousel">
+              <i class="fas fa-chevron-right" aria-hidden="true"></i>
+            </button>
+            <p class="carousel-status sr-only" aria-live="polite">Slide 1 of 4</p>
+          </div>
+          <p class="carousel-note">Comparison of depth estimation over upscaled features, COCO dataset</p>
+        </div>
+
+        <div class="carousel-group">
+          <h3 class="carousel-group-title">Visualizing Deformations</h3>
+          <div class="result-carousel" data-carousel aria-label="Deformation fields carousel">
+            <button class="carousel-nav carousel-nav-prev" type="button" data-carousel-prev aria-label="Previous deformation result">
+              <i class="fas fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <div class="carousel-viewport">
+              <figure class="carousel-slide is-active">
+                <div class="deformation-row">
+                  <button class="carousel-image-button deformation-source" type="button" data-modal-image="static/gifs/couch/couch.jpg" data-modal-caption="Couch">
+                    <img src="static/gifs/couch/couch.jpg" alt="Original couch image">
+                  </button>
+                  <button class="carousel-image-button deformation-gif" type="button" data-modal-image="static/gifs/couch/flow_features.gif" data-modal-caption="Couch deformation">
+                    <img src="static/gifs/couch/flow_features.gif" alt="Animated deformation field for the couch">
+                  </button>
+                  <span class="deformation-label">Original Image</span>
+                  <span class="deformation-gif-labels"><span>Deformation Field</span><span>Feature Map</span></span>
+                </div>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <div class="deformation-row">
+                  <button class="carousel-image-button deformation-source" type="button" data-modal-image="static/gifs/game_bat/game_bat.png" data-modal-caption="Game bat" tabindex="-1">
+                    <img src="static/gifs/game_bat/game_bat.png" alt="Original game bat image">
+                  </button>
+                  <button class="carousel-image-button deformation-gif" type="button" data-modal-image="static/gifs/game_bat/flow_features.gif" data-modal-caption="Game bat deformation" tabindex="-1">
+                    <img src="static/gifs/game_bat/flow_features.gif" alt="Animated deformation field for the game bat">
+                  </button>
+                  <span class="deformation-label">Original Image</span>
+                  <span class="deformation-gif-labels"><span>Deformation Field</span><span>Feature Map</span></span>
+                </div>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <div class="deformation-row">
+                  <button class="carousel-image-button deformation-source" type="button" data-modal-image="static/gifs/shield/shield.png" data-modal-caption="Shield" tabindex="-1">
+                    <img src="static/gifs/shield/shield.png" alt="Original shield image">
+                  </button>
+                  <button class="carousel-image-button deformation-gif" type="button" data-modal-image="static/gifs/shield/flow_features.gif" data-modal-caption="Shield deformation" tabindex="-1">
+                    <img src="static/gifs/shield/flow_features.gif" alt="Animated deformation field for the shield">
+                  </button>
+                  <span class="deformation-label">Original Image</span>
+                  <span class="deformation-gif-labels"><span>Deformation Field</span><span>Feature Map</span></span>
+                </div>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <div class="deformation-row">
+                  <button class="carousel-image-button deformation-source" type="button" data-modal-image="static/gifs/stingray/stingray.jpg" data-modal-caption="Stingray" tabindex="-1">
+                    <img src="static/gifs/stingray/stingray.jpg" alt="Original stingray image">
+                  </button>
+                  <button class="carousel-image-button deformation-gif" type="button" data-modal-image="static/gifs/stingray/flow_features.gif" data-modal-caption="Stingray deformation" tabindex="-1">
+                    <img src="static/gifs/stingray/flow_features.gif" alt="Animated deformation field for the stingray">
+                  </button>
+                  <span class="deformation-label">Original Image</span>
+                  <span class="deformation-gif-labels"><span>Deformation Field</span><span>Feature Map</span></span>
+                </div>
+              </figure>
+              <figure class="carousel-slide" aria-hidden="true">
+                <div class="deformation-row">
+                  <button class="carousel-image-button deformation-source" type="button" data-modal-image="static/gifs/telescope/telescope.jpg" data-modal-caption="Telescope" tabindex="-1">
+                    <img src="static/gifs/telescope/telescope.jpg" alt="Original telescope image">
+                  </button>
+                  <button class="carousel-image-button deformation-gif" type="button" data-modal-image="static/gifs/telescope/flow_features.gif" data-modal-caption="Telescope deformation" tabindex="-1">
+                    <img src="static/gifs/telescope/flow_features.gif" alt="Animated deformation field for the telescope">
+                  </button>
+                  <span class="deformation-label">Original Image</span>
+                  <span class="deformation-gif-labels"><span>Deformation Field</span><span>Feature Map</span></span>
+                </div>
+              </figure>
+            </div>
+            <button class="carousel-nav carousel-nav-next" type="button" data-carousel-next aria-label="Next deformation result">
+              <i class="fas fa-chevron-right" aria-hidden="true"></i>
+            </button>
+            <p class="carousel-status sr-only" aria-live="polite">Slide 1 of 5</p>
+          </div>
+          <div class="field-legend">
+            <img src="static/figures/WACV_optical_flow_color_coding.png" alt="Color palette encoding displacement direction and magnitude">
+            <div><h4>Field encoding</h4><p>Each color represents the displacement vector from the center of the palette to that color.</p></div>
+          </div>
+          <p class="deformation-note">Visualization of deformations along the different resolution stages of the upscaling process and their effect on the features while being upscaled. The field shows where each pixel was sampled from. Features are visualized through the first three PCA components.</p>
+        </div>
+
+        <div class="content-block quantitative-heading">
+          <h2 class="title is-3">Quantitative Results</h2>
+        </div>
+
+        <div class="results-tables">
+          <article class="table-wrap is-centered">
+            <h3 class="table-title">Semantic Segmentation</h3>
+            <div class="table-body">
+            <table class="benchmark-table">
+              <thead>
+                <tr class="group-row">
+                  <th>Model</th>
+                  <th><span class="keep-case">Cityscapes mIoU</span> <span class="metric-arrow">↑</span></th>
+                  <th>COCO <span class="keep-case">mIoU</span> <span class="metric-arrow">↑</span></th>
+                  <th>ADE20k <span class="keep-case">mIoU</span> <span class="metric-arrow">↑</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="ours-row"><td>ElasticDino-L</td><td>0.6875</td><td>0.6270</td><td>0.5299</td></tr>
+                <tr><td>OneFormer-sw-L</td><td>0.6412</td><td>0.6264</td><td>0.5109</td></tr>
+                <tr><td>Mask2Former-sw-L</td><td>0.5986</td><td>0.6239</td><td>0.4928</td></tr>
+              </tbody>
+            </table>
+            </div>
+          </article>
+
+          <article class="table-wrap table-wrap-wide is-centered">
+            <h3 class="table-title">Segmentation and Depth downstream tasks comparison against state of the art upsamplers - DINOv2</h3>
+            <div class="table-body">
+            <p class="table-note">Bold = best, underline = second best.</p>
+            <table class="benchmark-table is-wide">
+              <thead>
+                <tr class="group-row"><th rowspan="3">Method</th><th colspan="8">Semantic Segmentation</th><th colspan="2">Depth Estimation</th></tr>
+                <tr class="group-row"><th colspan="2">COCO</th><th colspan="2">VOC</th><th colspan="2">ADE20K</th><th colspan="2" class="keep-case">Cityscapes</th><th colspan="2">COCO</th></tr>
+                <tr><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="metric-delta">δ<sub>1</sub> <span class="metric-arrow">↑</span></th><th>RMSE <span class="metric-arrow">↓</span></th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Nearest</td><td>56.17</td><td>76.97</td><td>76.41</td><td>93.80</td><td>37.27</td><td>71.91</td><td>54.05</td><td>90.36</td><td>58.08</td><td>0.70</td></tr>
+                <tr><td>Bilinear</td><td>59.03</td><td>79.07</td><td>80.70</td><td>95.17</td><td>39.23</td><td>73.69</td><td>59.37</td><td>92.47</td><td>59.92</td><td>0.66</td></tr>
+                <tr><td>FeatUp</td><td>60.10</td><td>79.95</td><td>81.08</td><td>95.32</td><td>38.82</td><td>73.74</td><td>56.06</td><td>91.86</td><td><span class="second-best">61.69</span></td><td><span class="second-best">0.64</span></td></tr>
+                <tr><td>LoftUp</td><td><span class="second-best">61.62</span></td><td><span class="second-best">81.11</span></td><td>84.18</td><td>96.22</td><td><span class="second-best">41.51</span></td><td><span class="second-best">75.41</span></td><td><span class="second-best">62.13</span></td><td><span class="second-best">93.53</span></td><td>58.01</td><td>0.68</td></tr>
+                <tr><td>JAFAR</td><td>60.32</td><td>80.30</td><td>84.19</td><td>96.18</td><td>40.16</td><td>74.39</td><td>61.58</td><td>93.45</td><td>60.05</td><td>0.65</td></tr>
+                <tr><td>AnyUp</td><td>60.68</td><td>80.59</td><td>83.81</td><td>96.13</td><td>40.39</td><td>74.76</td><td>60.99</td><td>93.37</td><td>60.65</td><td><span class="second-best">0.64</span></td></tr>
+                <tr><td>UPLift</td><td>61.10</td><td>80.85</td><td><span class="second-best">84.82</span></td><td><span class="second-best">96.41</span></td><td>41.29</td><td>75.05</td><td><strong>65.02</strong></td><td><strong>94.34</strong></td><td>60.55</td><td><span class="second-best">0.64</span></td></tr>
+                <tr class="rule-above"><td>ED (ours)</td><td><strong>62.72</strong></td><td><strong>81.74</strong></td><td><strong>86.00</strong></td><td><strong>96.78</strong></td><td><strong>42.10</strong></td><td><strong>76.00</strong></td><td>61.33</td><td>93.44</td><td><strong>64.14</strong></td><td><strong>0.57</strong></td></tr>
+              </tbody>
+            </table>
+            </div>
+          </article>
+
+          <article class="table-wrap table-wrap-wide is-centered">
+            <h3 class="table-title">Segmentation and Depth downstream tasks comparison against state of the art upsamplers - DINOv3</h3>
+            <div class="table-body">
+            <p class="table-note">Bold = best, underline = second best.</p>
+            <table class="benchmark-table is-wide">
+              <thead>
+                <tr class="group-row"><th rowspan="3">Method</th><th colspan="8">Semantic Segmentation</th><th colspan="2">Depth Estimation</th></tr>
+                <tr class="group-row"><th colspan="2">COCO</th><th colspan="2">VOC</th><th colspan="2">ADE20K</th><th colspan="2" class="keep-case">Cityscapes</th><th colspan="2">COCO</th></tr>
+                <tr><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="keep-case">mIoU <span class="metric-arrow">↑</span></th><th class="keep-case">Acc <span class="metric-arrow">↑</span></th><th class="metric-delta">δ<sub>1</sub> <span class="metric-arrow">↑</span></th><th>RMSE <span class="metric-arrow">↓</span></th></tr>
+              </thead>
+              <tbody>
+                <tr><td>JAFAR</td><td>62.2</td><td>81.38</td><td>82.9</td><td>95.96</td><td>42.31</td><td>75.7</td><td>57.25</td><td>92.3</td><td>58.2</td><td>0.68</td></tr>
+                <tr><td>AnyUp</td><td>62.70</td><td>81.69</td><td>83.88</td><td>96.21</td><td>42.69</td><td>76.02</td><td>58.32</td><td>92.81</td><td><span class="second-best">59.43</span></td><td><span class="second-best">0.66</span></td></tr>
+                <tr><td>UPLift</td><td><span class="second-best">63.52</span></td><td><span class="second-best">82.14</span></td><td><span class="second-best">84.86</span></td><td><span class="second-best">96.58</span></td><td><span class="second-best">44.12</span></td><td><span class="second-best">76.62</span></td><td><span class="second-best">62.31</span></td><td><span class="second-best">93.82</span></td><td>59.29</td><td>0.66</td></tr>
+                <tr><td>ED (ours)</td><td><strong>64.04</strong></td><td><strong>82.43</strong></td><td><strong>86.26</strong></td><td><strong>96.89</strong></td><td><strong>44.57</strong></td><td><strong>77.03</strong></td><td><strong>62.91</strong></td><td><strong>94.03</strong></td><td><strong>61.10</strong></td><td><strong>0.62</strong></td></tr>
+              </tbody>
+            </table>
+            </div>
+          </article>
+
+          <article class="table-wrap is-centered">
+            <h3 class="table-title">Runtime and Memory</h3>
+            <div class="table-body">
+            <p class="table-note">Run time comparisons of ElasticDino with competing feature upscaling works over DINOv2</p>
+            <table class="benchmark-table">
+              <thead>
+                <tr class="group-row">
+                  <th>Metric</th>
+                  <th>ED (ours)</th>
+                  <th>AnyUp</th>
+                  <th>LoftUp</th>
+                  <th>JAFAR</th>
+                  <th>UPLift</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Avg Time (ms)</td><td>108.41</td><td>545.42</td><td>418.89</td><td>177.79</td><td>147.27</td></tr>
+                <tr><td>Peak mem (GB)</td><td>0.71</td><td>1.94</td><td>8.31</td><td>7.33</td><td>9.22</td></tr>
+              </tbody>
+            </table>
+            </div>
+          </article>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="image-modal" id="result-modal" hidden role="dialog" aria-modal="true" aria-label="Full-size qualitative result">
+      <button class="modal-close" type="button" aria-label="Close full-size result">
+        <i class="fas fa-times" aria-hidden="true"></i>
+      </button>
+      <figure class="modal-figure">
+        <img src="" alt="">
+        <figcaption id="result-modal-caption"></figcaption>
+      </figure>
+    </div>
+
+    <section class="section" id="BibTeX">
+      <div class="container is-max-desktop content">
+        <h2 class="title">Citation</h2>
+        <pre><code>@misc{mizrahi2026elasticdino,
+  title={ElasticDino: Dense Semantic Features using Elastic Deformations},
+  author={Mizrahi, Ulysse and Zaretzky, Sean and Danon, Dov and Bermano, Amit H.},
+  year={2026}
+}</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container is-max-desktop">
+      <p>
+        Page adapted from the academic project-page template family used by Nerfies and related project pages.
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,10 @@
+**/__pycache__
+.vscode
+/training_logs/*-test/
+/training_logs/
+/slurm_logs/
+/slurm-*.out
+/slurm-*.err
+/elasticdino-runs/ablations-combined/*-test/
+/elasticdino-runs/
+*.log
