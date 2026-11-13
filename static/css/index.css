@@ -147,6 +147,14 @@ a:hover {
   text-decoration: none;
 }
 
+.publication-button.publication-button-arxiv {
+  background: #b31b1b;
+}
+
+.publication-button.publication-button-arxiv:hover {
+  background: #8f1616;
+}
+
 .publication-button.is-disabled,
 .publication-button.is-disabled:hover {
   color: #ffffff;
